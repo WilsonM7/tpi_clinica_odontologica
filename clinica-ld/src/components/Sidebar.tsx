@@ -1,12 +1,11 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Users, DollarSign, Calendar, UserCog, LogOut } from 'lucide-react'
+import { LayoutDashboard, Users, Calendar, UserCog, LogOut } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 
 const menu = [
-  { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { path: '/', icon: LayoutDashboard, label: 'Home' },
   { path: '/pacientes', icon: Users, label: 'Pacientes' },
-  { path: '/caja', icon: DollarSign, label: 'Caja' },
   { path: '/agenda', icon: Calendar, label: 'Agenda' },
   { path: '/usuarios', icon: UserCog, label: 'Usuarios' },
 ]
