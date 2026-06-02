@@ -1,47 +1,82 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Users, Calendar, UserCog, LogOut } from 'lucide-react'
+import {
+  LayoutDashboard, Users, DollarSign, Calendar,
+  UserCog, LogOut, PanelLeftClose, PanelLeftOpen, Stethoscope
+} from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
-
 const menu = [
-  { path: '/', icon: LayoutDashboard, label: 'Home' },
-  { path: '/pacientes', icon: Users, label: 'Pacientes' },
-  { path: '/agenda', icon: Calendar, label: 'Agenda' },
-  { path: '/usuarios', icon: UserCog, label: 'Usuarios' },
+  { path: '/',          icon: LayoutDashboard, label: 'Home' },
+  { path: '/pacientes', icon: Users,            label: 'Pacientes' },
+  { path: '/caja',      icon: DollarSign,       label: 'Caja' },
+  { path: '/agenda',    icon: Calendar,         label: 'Agenda' },
+  { path: '/practicas', icon: Stethoscope,      label: 'Prácticas' },
+  { path: '/usuarios',  icon: UserCog,          label: 'Usuarios' },
 ]
 
-export default function Sidebar() {
+type SidebarProps = {
+  collapsed: boolean
+  onToggle: () => void
+}
+
+export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   return (
-    <aside className="w-56 min-h-screen bg-white border-r border-gray-200 flex flex-col">
-      <div className="p-4 border-b border-gray-200">
-        <img src="/logo.jpg" alt="L&D" className="h-60 w-60 object-cover rounded-full" />
+    <aside
+      className={`h-screen bg-white border-r border-gray-200 flex flex-col transition-all duration-200 flex-shrink-0 ${
+        collapsed ? 'w-16' : 'w-56'
+      }`}
+    >
+      {/* Logo + botón toggle */}
+      <div className={`border-b border-gray-200 flex items-center ${collapsed ? 'justify-center py-3 px-2 flex-col gap-1' : 'justify-between p-4'}`}>
+        <img
+          src="/logo.jpg"
+          alt="L&D"
+          className={`object-cover rounded-full transition-all duration-200 ${collapsed ? 'h-8 w-8' : 'h-16 w-16'}`}
+        />
+        <button
+          onClick={onToggle}
+          className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors flex-shrink-0"
+          title={collapsed ? 'Expandir menú' : 'Colapsar menú'}
+        >
+          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+        </button>
       </div>
-      <nav className="flex-1 p-3 space-y-1">
+
+      {/* Navegación */}
+      <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
         {menu.map(({ path, icon: Icon, label }) => (
           <NavLink
             key={path}
             to={path}
             end={path === '/'}
+            title={collapsed ? label : undefined}
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                collapsed ? 'justify-center' : ''
+              } ${
                 isActive
                   ? 'bg-blue-50 text-blue-600 font-medium'
                   : 'text-gray-600 hover:bg-gray-50'
               }`
             }
           >
-            <Icon size={18} />
-            {label}
+            <Icon size={18} className="flex-shrink-0" />
+            {!collapsed && label}
           </NavLink>
         ))}
       </nav>
-      <div className="p-3 border-t border-gray-200">
+
+      {/* Cerrar sesión */}
+      <div className="p-2 border-t border-gray-200">
         <button
           onClick={() => supabase.auth.signOut()}
-          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-red-50 hover:text-red-500 w-full transition-colors"
+          title={collapsed ? 'Cerrar sesión' : undefined}
+          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-red-50 hover:text-red-500 w-full transition-colors ${
+            collapsed ? 'justify-center' : ''
+          }`}
         >
-          <LogOut size={18} />
-          Cerrar sesión
+          <LogOut size={18} className="flex-shrink-0" />
+          {!collapsed && 'Cerrar sesión'}
         </button>
       </div>
     </aside>

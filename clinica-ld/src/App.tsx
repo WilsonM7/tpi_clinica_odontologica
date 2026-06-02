@@ -5,13 +5,12 @@ import type { Session } from '@supabase/supabase-js'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Pacientes from './pages/Pacientes'
+import Caja from './pages/Caja'
 import Agenda from './pages/Agenda'
 import FichaPaciente from './pages/FichaPaciente'
 import Usuarios from './pages/Usuarios'
 import FichaUsuario from './pages/FichaUsuario'
-
-
-
+import Practicas from './pages/Practicas'
 
 function App() {
   const [session, setSession] = useState<Session | null>(null)
@@ -56,13 +55,15 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Layout />}>
-  <Route index element={<Dashboard />} />
-  <Route path="pacientes" element={<Pacientes />} />
-  <Route path="pacientes/:id" element={<FichaPaciente />} />
-  <Route path="agenda" element={<Agenda />} />
-  <Route path="usuarios" element={<Usuarios />} />
-  <Route path="usuarios/:id" element={<FichaUsuario />} />
-</Route>
+          <Route index element={<Dashboard />} />
+          <Route path="pacientes" element={<Pacientes />} />
+          <Route path="pacientes/:id" element={<FichaPaciente />} />
+          <Route path="caja" element={<Caja />} />
+          <Route path="agenda" element={<Agenda />} />
+          <Route path="usuarios" element={<Usuarios />} />
+          <Route path="usuarios/:id" element={<FichaUsuario />} />
+          <Route path="practicas" element={<Practicas />} />
+        </Route>
       </Routes>
     </BrowserRouter>
   )
