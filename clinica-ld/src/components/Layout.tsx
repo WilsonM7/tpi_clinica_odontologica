@@ -1,11 +1,18 @@
+import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 
 export default function Layout() {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <Sidebar />
-      <main className="flex-1 p-6 overflow-auto">
+    <div className="flex h-screen bg-gray-50">
+      <Sidebar
+        collapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed(prev => !prev)}
+      />
+      {/* overflow-hidden: la agenda maneja su propio scroll internamente */}
+      <main className="flex-1 overflow-hidden">
         <Outlet />
       </main>
     </div>
