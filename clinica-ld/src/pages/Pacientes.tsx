@@ -23,6 +23,8 @@ type NuevoPaciente = {
   como_conocio: string
   fecha_nacimiento: string
   fecha_ingreso: string
+  direccion: string
+  ciudad: string
 }
 
 export default function Pacientes() {
@@ -196,7 +198,8 @@ function FormularioPaciente({ onClose, onGuardado }: { onClose: () => void, onGu
   const [form, setForm] = useState<NuevoPaciente>({
     apellido_nombre: '', tipo_documento: 'DNI', dni: '',
     prefijo: '', telefono: '', email: '', como_conocio: '',
-    fecha_nacimiento: '', fecha_ingreso: new Date().toISOString().split('T')[0]
+    fecha_nacimiento: '', fecha_ingreso: new Date().toISOString().split('T')[0],
+    direccion: '', ciudad: ''
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -235,14 +238,18 @@ function FormularioPaciente({ onClose, onGuardado }: { onClose: () => void, onGu
       dni: `${form.tipo_documento}: ${form.dni}`,
       telefono: form.prefijo && form.telefono ? `${form.prefijo}-${form.telefono}` : '',
       email: form.email || null,
-      como_conocio: form.como_conocio,
+      como_conocio: form.como_conocio || null,
       fecha_nacimiento: form.fecha_nacimiento || null,
       fecha_ingreso: form.fecha_ingreso || null,
+      direccion: form.direccion || null,
+      ciudad: form.ciudad || null,
     }
 
     const { error } = await supabase.from('pacientes').insert(datosGuardar)
     if (error) {
-      setError(error.message.includes('unique') ? `Ya existe un paciente con ${form.tipo_documento} ${form.dni}` : 'Error al guardar')
+      setError(error.message.includes('unique')
+        ? `Ya existe un paciente con ${form.tipo_documento} ${form.dni}`
+        : 'Error al guardar')
     } else {
       onGuardado()
     }
@@ -322,7 +329,27 @@ function FormularioPaciente({ onClose, onGuardado }: { onClose: () => void, onGu
               placeholder="ejemplo@mail.com"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <p className="text-xs text-gray-400 mt-1">Opcional, pero debe contener @ si se ingresa</p>
+          </div>
+
+          {/* NUEVOS: Dirección y Ciudad */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Dirección</label>
+            <input
+              value={form.direccion}
+              onChange={e => setForm({ ...form, direccion: e.target.value })}
+              placeholder="Ej: San Martín 1234"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Ciudad</label>
+            <input
+              value={form.ciudad}
+              onChange={e => setForm({ ...form, ciudad: e.target.value })}
+              placeholder="Ej: Rosario"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
 
           <div>
@@ -383,4 +410,4 @@ function FormularioPaciente({ onClose, onGuardado }: { onClose: () => void, onGu
       </div>
     </div>
   )
-} 
+}
