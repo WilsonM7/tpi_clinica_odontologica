@@ -476,7 +476,7 @@ export default function Agenda() {
                     if (!habilitada || !puedeModificar || diaInh || (soloLibres && tieneturno)) return
                     abrirFormTurno(fecha, hora, con.id)
                   }}>
-                  {ts.map(t => renderTurno(t, consultorios.length > 3, soloLibres))}
+                  {ts.map(t => renderTurno(t, false, soloLibres))}
                 </div>
               )
             })}
