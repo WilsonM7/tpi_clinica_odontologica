@@ -13,16 +13,8 @@ type Usuario = {
   sucursales: { nombre: string }
 }
 
-type Especialidad = {
-  id: string
-  nombre: string
-}
-
-type Sucursal = {
-  id: string
-  nombre: string
-}
-
+type Especialidad = { id: string; nombre: string }
+type Sucursal = { id: string; nombre: string }
 type Horario = {
   id?: string
   profesional_id?: string
@@ -32,6 +24,11 @@ type Horario = {
   hora_inicio: string
   hora_fin: string
   sucursales?: { nombre: string }
+}
+type PorcentajeEsp = {
+  id?: string
+  especialidad_id: string
+  porcentaje: number
 }
 
 const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
@@ -58,6 +55,15 @@ export default function FichaUsuario() {
   const [mostrarFormHorario, setMostrarFormHorario] = useState(false)
   const [form, setForm] = useState({ nombre: '', rol: '', sucursal_id: '' })
 
+  // Porcentajes
+  const [porcentajeInstalacion, setPorcentajeInstalacion] = useState('')
+  const [porcentajePracticas, setPorcentajePracticas] = useState('')
+  const [porcentajesEsp, setPorcentajesEsp] = useState<PorcentajeEsp[]>([])
+  // Versiones guardadas para restaurar al cancelar
+  const [pctInstalacionGuardado, setPctInstalacionGuardado] = useState('')
+  const [pctPracticasGuardado, setPctPracticasGuardado] = useState('')
+  const [pctEspGuardado, setPctEspGuardado] = useState<PorcentajeEsp[]>([])
+
   useEffect(() => {
     cargarDatos()
     cargarRolActual()
@@ -73,12 +79,7 @@ export default function FichaUsuario() {
 
   async function cargarDatos() {
     setLoading(true)
-    const { data: u } = await supabase
-      .from('usuarios')
-      .select('*, sucursales(nombre)')
-      .eq('id', id)
-      .single()
-
+    const { data: u } = await supabase.from('usuarios').select('*, sucursales(nombre)').eq('id', id).single()
     setUsuario(u)
     setForm({ nombre: u?.nombre || '', rol: u?.rol || '', sucursal_id: u?.sucursal_id || '' })
 
@@ -92,57 +93,56 @@ export default function FichaUsuario() {
     if (u?.rol === 'profesional') {
       await cargarProfesional(u.id)
     }
-
     setLoading(false)
   }
 
   async function cargarProfesional(usuarioId: string) {
-    // Query separado — solo busca el id del profesional, SIN join de especialidades
     const { data: prof, error: errProf } = await supabase
       .from('profesionales')
-      .select('id, nombre_corto')
+      .select('id, nombre_corto, porcentaje_instalacion, porcentaje_practicas')
       .eq('usuario_id', usuarioId)
       .maybeSingle()
 
-    if (errProf) {
-      console.error('Error al cargar profesional:', errProf)
-    }
+    if (errProf) console.error('Error al cargar profesional:', errProf)
 
     if (!prof) {
-      // No existe — intentar crearlo
       const { data: u } = await supabase.from('usuarios').select('nombre').eq('id', usuarioId).single()
       const nombre_corto = u?.nombre?.split(' ')[0] || 'Prof'
-
       const { data: nuevo, error: errCrear } = await supabase
         .from('profesionales')
         .insert({ usuario_id: usuarioId, nombre_corto, activo: true })
-        .select('id')
-        .single()
-
-      if (errCrear) {
-        console.error('Error al crear profesional:', errCrear)
-        return
-      }
-
-      if (nuevo) {
-        setProfesionalId(nuevo.id)
-        cargarHorarios(nuevo.id)
-      }
+        .select('id').single()
+      if (errCrear) { console.error('Error al crear profesional:', errCrear); return }
+      if (nuevo) { setProfesionalId(nuevo.id); cargarHorarios(nuevo.id) }
       return
     }
 
-    // Existe — cargar especialidades en query separado
     setProfesionalId(prof.id)
     cargarHorarios(prof.id)
 
+    // Especialidades
     const { data: profEsps } = await supabase
-      .from('profesional_especialidades')
-      .select('especialidad_id')
-      .eq('profesional_id', prof.id)
-
+      .from('profesional_especialidades').select('especialidad_id').eq('profesional_id', prof.id)
     const ids = (profEsps || []).map((e: any) => e.especialidad_id)
     setEspAsignadas(ids)
     setEspSeleccionadas(ids)
+
+    // Porcentajes base
+    const pctInst = prof.porcentaje_instalacion?.toString() || ''
+    const pctPrac = prof.porcentaje_practicas?.toString() || ''
+    setPorcentajeInstalacion(pctInst)
+    setPorcentajePracticas(pctPrac)
+    setPctInstalacionGuardado(pctInst)
+    setPctPracticasGuardado(pctPrac)
+
+    // Porcentajes por especialidad
+    const { data: pctEsps } = await supabase
+      .from('profesional_porcentajes_especialidad')
+      .select('id, especialidad_id, porcentaje')
+      .eq('profesional_id', prof.id)
+    const lista = pctEsps || []
+    setPorcentajesEsp(lista)
+    setPctEspGuardado(lista)
   }
 
   async function cargarHorarios(profId: string) {
@@ -151,8 +151,7 @@ export default function FichaUsuario() {
       .select('*, sucursales(nombre)')
       .eq('profesional_id', profId)
       .eq('activo', true)
-      .order('sucursal_id')
-      .order('dia_semana')
+      .order('sucursal_id').order('dia_semana')
     setHorarios(data || [])
   }
 
@@ -164,21 +163,17 @@ export default function FichaUsuario() {
   }
 
   async function guardarCambios() {
-    setGuardando(true)
-    setError('')
+    setGuardando(true); setError('')
 
     const { error: updateError } = await supabase
       .from('usuarios')
       .update({ nombre: form.nombre, rol: form.rol, sucursal_id: form.sucursal_id })
       .eq('id', id)
 
-    if (updateError) {
-      setError('Error al guardar')
-      setGuardando(false)
-      return
-    }
+    if (updateError) { setError('Error al guardar'); setGuardando(false); return }
 
     if (form.rol === 'profesional' && profesionalId) {
+      // Especialidades
       await supabase.from('profesional_especialidades').delete().eq('profesional_id', profesionalId)
       if (espSeleccionadas.length > 0) {
         await supabase.from('profesional_especialidades').insert(
@@ -186,16 +181,54 @@ export default function FichaUsuario() {
         )
       }
       setEspAsignadas(espSeleccionadas)
+
+      // Porcentajes base
+      await supabase.from('profesionales').update({
+        porcentaje_instalacion: porcentajeInstalacion ? parseFloat(porcentajeInstalacion) : null,
+        porcentaje_practicas: porcentajePracticas ? parseFloat(porcentajePracticas) : null,
+      }).eq('id', profesionalId)
+      setPctInstalacionGuardado(porcentajeInstalacion)
+      setPctPracticasGuardado(porcentajePracticas)
+
+      // Porcentajes por especialidad: borrar y reinsertar
+      await supabase.from('profesional_porcentajes_especialidad').delete().eq('profesional_id', profesionalId)
+      const validos = porcentajesEsp.filter(p => p.especialidad_id && p.porcentaje > 0)
+      if (validos.length > 0) {
+        await supabase.from('profesional_porcentajes_especialidad').insert(
+          validos.map(p => ({ profesional_id: profesionalId, especialidad_id: p.especialidad_id, porcentaje: p.porcentaje }))
+        )
+      }
+      setPctEspGuardado(validos)
+      setPorcentajesEsp(validos)
     }
 
-    // Si cambió el rol a profesional y no tiene registro aún
-    if (form.rol === 'profesional' && !profesionalId && id) {
-      await cargarProfesional(id)
-    }
+    if (form.rol === 'profesional' && !profesionalId && id) await cargarProfesional(id)
 
     setUsuario(prev => prev ? { ...prev, ...form } : null)
     setEditando(false)
     setGuardando(false)
+  }
+
+  function cancelarEdicion() {
+    setEditando(false)
+    setEspSeleccionadas(espAsignadas)
+    setPorcentajeInstalacion(pctInstalacionGuardado)
+    setPorcentajePracticas(pctPracticasGuardado)
+    setPorcentajesEsp(pctEspGuardado)
+    if (usuario) setForm({ nombre: usuario.nombre, rol: usuario.rol, sucursal_id: usuario.sucursal_id })
+  }
+
+  function agregarPorcentajeEsp() {
+    const espDisponible = especialidades.find(e => !porcentajesEsp.some(p => p.especialidad_id === e.id))
+    if (espDisponible) setPorcentajesEsp(prev => [...prev, { especialidad_id: espDisponible.id, porcentaje: 0 }])
+  }
+
+  function actualizarPorcentajeEsp(idx: number, field: 'especialidad_id' | 'porcentaje', value: string | number) {
+    setPorcentajesEsp(prev => prev.map((p, i) => i === idx ? { ...p, [field]: value } : p))
+  }
+
+  function eliminarPorcentajeEsp(idx: number) {
+    setPorcentajesEsp(prev => prev.filter((_, i) => i !== idx))
   }
 
   async function desactivarUsuario() {
@@ -213,9 +246,7 @@ export default function FichaUsuario() {
   }
 
   function toggleEsp(espId: string) {
-    setEspSeleccionadas(prev =>
-      prev.includes(espId) ? prev.filter(e => e !== espId) : [...prev, espId]
-    )
+    setEspSeleccionadas(prev => prev.includes(espId) ? prev.filter(e => e !== espId) : [...prev, espId])
   }
 
   const puedeGestionar = rolActual === 'super_admin' || rolActual === 'jefe_clinica'
@@ -223,353 +254,380 @@ export default function FichaUsuario() {
   const puedeEliminar = rolActual === 'super_admin' && usuario?.rol !== 'super_admin'
 
   const etiquetaRol: Record<string, string> = {
-    super_admin: '👑 Super Admin',
-    jefe_clinica: '🏥 Jefe de Clínica',
-    profesional: '🦷 Profesional',
-    secretaria: '💼 Secretaria',
-    telemarketer: '📞 Telemarketer',
-    asistente: '🤝 Asistente',
-    supervisora: '👁️ Supervisora',
+    super_admin: '👑 Super Admin', jefe_clinica: '🏥 Jefe de Clínica',
+    profesional: '🦷 Profesional', secretaria: '💼 Secretaria',
+    telemarketer: '📞 Telemarketer', asistente: '🤝 Asistente', supervisora: '👁️ Supervisora',
   }
 
-  const horariosPorSucursal = sucursales.map(s => ({
-    sucursal: s,
-    horarios: horarios.filter((h: any) => h.sucursal_id === s.id)
-  })).filter(g => g.horarios.length > 0)
+  const horariosPorSucursal = sucursales
+    .map(s => ({ sucursal: s, horarios: horarios.filter((h: any) => h.sucursal_id === s.id) }))
+    .filter(g => g.horarios.length > 0)
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Cargando...</div>
   if (!usuario) return <div className="text-gray-400">Usuario no encontrado</div>
 
   return (
-    <div>
-      <button
-        onClick={() => navigate('/usuarios')}
-        className="flex items-center gap-2 text-gray-500 hover:text-gray-700 mb-6 text-sm"
-      >
-        <ArrowLeft size={16} /> Volver a usuarios
-      </button>
+    <div className="h-full overflow-y-auto">
+      <div className="max-w-5xl mx-auto p-6">
+        <button onClick={() => navigate('/usuarios')}
+          className="flex items-center gap-2 text-gray-500 hover:text-gray-700 mb-6 text-sm">
+          <ArrowLeft size={16} /> Volver a usuarios
+        </button>
 
-      <div className="flex justify-between items-start mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-800">{usuario.nombre}</h1>
-          <p className="text-gray-500 text-sm">{usuario.email}</p>
-          {!usuario.activo && (
-            <span className="inline-block mt-1 px-2 py-0.5 bg-red-100 text-red-600 text-xs rounded-full">
-              Usuario desactivado
-            </span>
-          )}
-        </div>
-        <div className="flex gap-2">
-          {editando ? (
-            <>
-              <button
-                onClick={() => { setEditando(false); setEspSeleccionadas(espAsignadas) }}
-                className="flex items-center gap-2 border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-50"
-              >
-                <X size={16} /> Cancelar
-              </button>
-              <button
-                onClick={guardarCambios}
-                disabled={guardando}
-                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
-              >
-                <Save size={16} /> {guardando ? 'Guardando...' : 'Guardar'}
-              </button>
-            </>
-          ) : (
-            <>
-              {puedeDesactivar && usuario.activo && (
-                <button
-                  onClick={() => setConfirmarDesactivar(true)}
-                  className="border border-orange-300 text-orange-600 px-4 py-2 rounded-lg text-sm hover:bg-orange-50"
-                >
-                  Desactivar
-                </button>
-              )}
-              {puedeEliminar && (
-                <button
-                  onClick={() => setConfirmarEliminar(true)}
-                  className="border border-red-300 text-red-500 px-4 py-2 rounded-lg text-sm hover:bg-red-50"
-                >
-                  Eliminar
-                </button>
-              )}
-              {puedeGestionar && (
-                <button
-                  onClick={() => setEditando(true)}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700"
-                >
-                  Editar
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-
-      {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        {/* Datos del usuario */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 min-h-[240px]">
-          <h2 className="font-semibold text-gray-800 mb-4">Datos del usuario</h2>
-          <div className="space-y-3">
-            <Campo label="Nombre" value={form.nombre} editando={editando}
-              onChange={v => setForm({ ...form, nombre: v })} />
-            <Campo label="Email" value={usuario.email} editando={false} onChange={() => {}} />
-
-            {editando ? (
-              <div>
-                <p className="text-xs text-gray-400 mb-1">Rol</p>
-                <select
-                  value={form.rol}
-                  onChange={e => setForm({ ...form, rol: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="secretaria">Secretaria</option>
-                  <option value="telemarketer">Telemarketer</option>
-                  <option value="asistente">Asistente</option>
-                  <option value="supervisora">Supervisora</option>
-                  <option value="jefe_clinica">Jefe de Clínica</option>
-                  <option value="profesional">Profesional</option>
-                </select>
-              </div>
-            ) : (
-              <div>
-                <p className="text-xs text-gray-400 mb-1">Rol</p>
-                <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-medium">
-                  {etiquetaRol[usuario.rol] || usuario.rol}
-                </span>
-              </div>
+        <div className="flex justify-between items-start mb-6">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-800">{usuario.nombre}</h1>
+            <p className="text-gray-500 text-sm">{usuario.email}</p>
+            {!usuario.activo && (
+              <span className="inline-block mt-1 px-2 py-0.5 bg-red-100 text-red-600 text-xs rounded-full">
+                Usuario desactivado
+              </span>
             )}
-
+          </div>
+          <div className="flex gap-2">
             {editando ? (
-              <div>
-                <p className="text-xs text-gray-400 mb-1">Sucursal principal</p>
-                <select
-                  value={form.sucursal_id}
-                  onChange={e => setForm({ ...form, sucursal_id: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {sucursales.map(s => (
-                    <option key={s.id} value={s.id}>{s.nombre}</option>
-                  ))}
-                </select>
-              </div>
+              <>
+                <button onClick={cancelarEdicion}
+                  className="flex items-center gap-2 border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-50">
+                  <X size={16} /> Cancelar
+                </button>
+                <button onClick={guardarCambios} disabled={guardando}
+                  className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
+                  <Save size={16} /> {guardando ? 'Guardando...' : 'Guardar'}
+                </button>
+              </>
             ) : (
-              <div>
-                <p className="text-xs text-gray-400 mb-1">Sucursal principal</p>
-                <p className="text-sm text-gray-800">{usuario.sucursales?.nombre || '-'}</p>
-              </div>
+              <>
+                {puedeDesactivar && usuario.activo && (
+                  <button onClick={() => setConfirmarDesactivar(true)}
+                    className="border border-orange-300 text-orange-600 px-4 py-2 rounded-lg text-sm hover:bg-orange-50">
+                    Desactivar
+                  </button>
+                )}
+                {puedeEliminar && (
+                  <button onClick={() => setConfirmarEliminar(true)}
+                    className="border border-red-300 text-red-500 px-4 py-2 rounded-lg text-sm hover:bg-red-50">
+                    Eliminar
+                  </button>
+                )}
+                {puedeGestionar && (
+                  <button onClick={() => setEditando(true)}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">
+                    Editar
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>
 
-        {/* Especialidades */}
-        {usuario.rol === 'profesional' && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 min-h-[240px]">
-            <h2 className="font-semibold text-gray-800 mb-4">Especialidades</h2>
-            {editando ? (
-              <div className="space-y-2">
-                {especialidades.map(esp => (
-                  <label key={esp.id} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={espSeleccionadas.includes(esp.id)}
-                      onChange={() => toggleEsp(esp.id)}
-                      className="rounded border-gray-300 text-blue-600"
-                    />
-                    <span className="text-sm text-gray-700">{esp.nombre}</span>
-                  </label>
-                ))}
+        {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
+
+        <div className="space-y-6">
+          {/* Fila 1: Datos + Especialidades */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Datos del usuario */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+              <h2 className="font-semibold text-gray-800 mb-4">Datos del usuario</h2>
+              <div className="space-y-3">
+                <Campo label="Nombre" value={form.nombre} editando={editando}
+                  onChange={v => setForm({ ...form, nombre: v })} />
+                <Campo label="Email" value={usuario.email} editando={false} onChange={() => {}} />
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Rol</p>
+                  {editando ? (
+                    <select value={form.rol} onChange={e => setForm({ ...form, rol: e.target.value })}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="secretaria">Secretaria</option>
+                      <option value="telemarketer">Telemarketer</option>
+                      <option value="asistente">Asistente</option>
+                      <option value="supervisora">Supervisora</option>
+                      <option value="jefe_clinica">Jefe de Clínica</option>
+                      <option value="profesional">Profesional</option>
+                    </select>
+                  ) : (
+                    <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-medium">
+                      {etiquetaRol[usuario.rol] || usuario.rol}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Sucursal principal</p>
+                  {editando ? (
+                    <select value={form.sucursal_id} onChange={e => setForm({ ...form, sucursal_id: e.target.value })}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      {sucursales.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                    </select>
+                  ) : (
+                    <p className="text-sm text-gray-800">{usuario.sucursales?.nombre || '-'}</p>
+                  )}
+                </div>
               </div>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {espAsignadas.length === 0 ? (
-                  <p className="text-gray-400 text-sm">Sin especialidades asignadas</p>
+            </div>
+
+            {/* Especialidades */}
+            {usuario.rol === 'profesional' && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+                <h2 className="font-semibold text-gray-800 mb-4">Especialidades</h2>
+                {editando ? (
+                  <div className="space-y-2">
+                    {especialidades.map(esp => (
+                      <label key={esp.id} className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={espSeleccionadas.includes(esp.id)}
+                          onChange={() => toggleEsp(esp.id)}
+                          className="rounded border-gray-300 text-blue-600" />
+                        <span className="text-sm text-gray-700">{esp.nombre}</span>
+                      </label>
+                    ))}
+                  </div>
                 ) : (
-                  especialidades
-                    .filter(e => espAsignadas.includes(e.id))
-                    .map(e => (
-                      <span key={e.id} className="px-2 py-1 bg-green-50 text-green-700 rounded-full text-xs font-medium">
-                        {e.nombre}
-                      </span>
-                    ))
+                  <div className="flex flex-wrap gap-2">
+                    {espAsignadas.length === 0 ? (
+                      <p className="text-gray-400 text-sm">Sin especialidades asignadas</p>
+                    ) : (
+                      especialidades.filter(e => espAsignadas.includes(e.id)).map(e => (
+                        <span key={e.id} className="px-2 py-1 bg-green-50 text-green-700 rounded-full text-xs font-medium">
+                          {e.nombre}
+                        </span>
+                      ))
+                    )}
+                  </div>
                 )}
               </div>
             )}
           </div>
-        )}
-      </div>
 
-      {/* Horarios */}
-      {usuario.rol === 'profesional' && (
-        <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="font-semibold text-gray-800">Horarios de atención</h2>
-            {puedeGestionar && profesionalId && (
-              <button
-                onClick={() => setMostrarFormHorario(true)}
-                className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-blue-700"
-              >
-                <Plus size={14} /> Agregar horario
-              </button>
-            )}
-            {puedeGestionar && !profesionalId && (
-              <button
-                onClick={() => id && cargarProfesional(id)}
-                className="flex items-center gap-2 border border-blue-300 text-blue-600 px-3 py-1.5 rounded-lg text-sm hover:bg-blue-50"
-              >
-                Reintentar carga
-              </button>
-            )}
-          </div>
+          {/* Porcentajes de ganancia */}
+          {usuario.rol === 'profesional' && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+              <h2 className="font-semibold text-gray-800 mb-4">Porcentajes de ganancia</h2>
 
-          {horarios.length === 0 ? (
-            <p className="text-gray-400 text-sm">Sin horarios cargados</p>
-          ) : (
-            <div className="space-y-4">
-              {horariosPorSucursal.map(({ sucursal, horarios: hs }) => (
-                <div key={sucursal.id}>
-                  <p className="text-xs font-semibold text-gray-500 uppercase mb-2">{sucursal.nombre}</p>
+              {/* Porcentaje instalación y prácticas */}
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Porcentaje Instalación (%)</p>
+                  {editando ? (
+                    <input type="number" min="0" max="100" step="0.1"
+                      value={porcentajeInstalacion}
+                      onChange={e => setPorcentajeInstalacion(e.target.value)}
+                      placeholder="Ej: 20"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  ) : (
+                    <p className="text-sm text-gray-800 font-medium">
+                      {pctInstalacionGuardado ? `${pctInstalacionGuardado}%` : '-'}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Porcentaje Prácticas (%)</p>
+                  {editando ? (
+                    <input type="number" min="0" max="100" step="0.1"
+                      value={porcentajePracticas}
+                      onChange={e => setPorcentajePracticas(e.target.value)}
+                      placeholder="Ej: 15"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  ) : (
+                    <p className="text-sm text-gray-800 font-medium">
+                      {pctPracticasGuardado ? `${pctPracticasGuardado}%` : '-'}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Porcentajes por especialidad */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-gray-500 font-medium">Porcentajes por especialidad</p>
+                  {editando && (
+                    <button type="button" onClick={agregarPorcentajeEsp}
+                      disabled={porcentajesEsp.length >= especialidades.length}
+                      className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 disabled:opacity-40">
+                      <Plus size={12} /> Agregar especialidad
+                    </button>
+                  )}
+                </div>
+
+                {!editando && pctEspGuardado.length === 0 && (
+                  <p className="text-sm text-gray-400">Sin porcentajes por especialidad</p>
+                )}
+
+                {!editando && pctEspGuardado.length > 0 && (
                   <div className="space-y-1">
-                    {hs.map((h: any) => (
-                      <div key={h.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg text-sm">
-                        <div className="flex items-center gap-3">
-                          <span className="font-medium text-gray-700 w-20">{DIAS[h.dia_semana]}</span>
-                          <span className={`px-2 py-0.5 rounded-full text-xs ${
-                            h.turno === 'mañana' ? 'bg-yellow-100 text-yellow-700' :
-                            h.turno === 'tarde' ? 'bg-blue-100 text-blue-700' :
-                            'bg-purple-100 text-purple-700'
-                          }`}>
-                            {h.turno}
-                          </span>
-                          <span className="text-gray-600">{h.hora_inicio} - {h.hora_fin}</span>
+                    {pctEspGuardado.map((pe, idx) => {
+                      const esp = especialidades.find(e => e.id === pe.especialidad_id)
+                      return (
+                        <div key={idx} className="flex items-center justify-between py-1.5 px-3 bg-gray-50 rounded-lg text-sm">
+                          <span className="text-gray-700">{esp?.nombre || '-'}</span>
+                          <span className="font-semibold text-blue-700">{pe.porcentaje}%</span>
                         </div>
-                        {puedeGestionar && (
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => setHorarioEditar(h)}
-                              className="text-gray-400 hover:text-blue-600 p-1"
-                            >
-                              <Pencil size={14} />
-                            </button>
-                            <button
-                              onClick={() => setConfirmarEliminarHorario(h.id)}
-                              className="text-red-400 hover:text-red-600 p-1"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        )}
+                      )
+                    })}
+                  </div>
+                )}
+
+                {editando && (
+                  <div className="space-y-2">
+                    {porcentajesEsp.map((pe, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <select value={pe.especialidad_id}
+                          onChange={e => actualizarPorcentajeEsp(idx, 'especialidad_id', e.target.value)}
+                          className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                          {especialidades.map(e => (
+                            <option key={e.id} value={e.id}
+                              disabled={porcentajesEsp.some((p, i) => i !== idx && p.especialidad_id === e.id)}>
+                              {e.nombre}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="relative w-28">
+                          <input type="number" min="0" max="100" step="0.1"
+                            value={pe.porcentaje}
+                            onChange={e => actualizarPorcentajeEsp(idx, 'porcentaje', parseFloat(e.target.value) || 0)}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 pr-7" />
+                          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">%</span>
+                        </div>
+                        <button type="button" onClick={() => eliminarPorcentajeEsp(idx)}
+                          className="text-red-400 hover:text-red-600 p-1">
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     ))}
+                    {porcentajesEsp.length === 0 && (
+                      <p className="text-xs text-gray-400">Sin porcentajes por especialidad. Hacé click en "Agregar especialidad" para añadir.</p>
+                    )}
                   </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Horarios */}
+          {usuario.rol === 'profesional' && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="font-semibold text-gray-800">Horarios de atención</h2>
+                {puedeGestionar && profesionalId && (
+                  <button onClick={() => setMostrarFormHorario(true)}
+                    className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-blue-700">
+                    <Plus size={14} /> Agregar horario
+                  </button>
+                )}
+                {puedeGestionar && !profesionalId && (
+                  <button onClick={() => id && cargarProfesional(id)}
+                    className="flex items-center gap-2 border border-blue-300 text-blue-600 px-3 py-1.5 rounded-lg text-sm hover:bg-blue-50">
+                    Reintentar carga
+                  </button>
+                )}
+              </div>
+
+              {horarios.length === 0 ? (
+                <p className="text-gray-400 text-sm">Sin horarios cargados</p>
+              ) : (
+                <div className="space-y-4">
+                  {horariosPorSucursal.map(({ sucursal, horarios: hs }) => (
+                    <div key={sucursal.id}>
+                      <p className="text-xs font-semibold text-gray-500 uppercase mb-2">{sucursal.nombre}</p>
+                      <div className="space-y-1">
+                        {hs.map((h: any) => (
+                          <div key={h.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg text-sm">
+                            <div className="flex items-center gap-3">
+                              <span className="font-medium text-gray-700 w-20">{DIAS[h.dia_semana]}</span>
+                              <span className={`px-2 py-0.5 rounded-full text-xs ${
+                                h.turno === 'mañana' ? 'bg-yellow-100 text-yellow-700' :
+                                h.turno === 'tarde' ? 'bg-blue-100 text-blue-700' :
+                                'bg-purple-100 text-purple-700'
+                              }`}>{h.turno}</span>
+                              <span className="text-gray-600">{h.hora_inicio} - {h.hora_fin}</span>
+                            </div>
+                            {puedeGestionar && (
+                              <div className="flex items-center gap-1">
+                                <button onClick={() => setHorarioEditar(h)} className="text-gray-400 hover:text-blue-600 p-1">
+                                  <Pencil size={14} />
+                                </button>
+                                <button onClick={() => setConfirmarEliminarHorario(h.id)} className="text-red-400 hover:text-red-600 p-1">
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>
-      )}
 
-      {/* Modal agregar horario */}
-      {mostrarFormHorario && profesionalId && (
-        <FormularioHorario
-          profesionalId={profesionalId}
-          horariosExistentes={horarios}
-          sucursales={sucursales}
-          onClose={() => setMostrarFormHorario(false)}
-          onGuardado={() => { setMostrarFormHorario(false); cargarHorarios(profesionalId) }}
-        />
-      )}
+        {/* Modales */}
+        {mostrarFormHorario && profesionalId && (
+          <FormularioHorario profesionalId={profesionalId} horariosExistentes={horarios} sucursales={sucursales}
+            onClose={() => setMostrarFormHorario(false)}
+            onGuardado={() => { setMostrarFormHorario(false); cargarHorarios(profesionalId) }} />
+        )}
 
-      {/* Modal editar horario */}
-      {horarioEditar && profesionalId && (
-        <FormularioHorario
-          profesionalId={profesionalId}
-          horariosExistentes={horarios}
-          sucursales={sucursales}
-          horarioEditar={horarioEditar}
-          onClose={() => setHorarioEditar(null)}
-          onGuardado={() => { setHorarioEditar(null); cargarHorarios(profesionalId) }}
-        />
-      )}
+        {horarioEditar && profesionalId && (
+          <FormularioHorario profesionalId={profesionalId} horariosExistentes={horarios} sucursales={sucursales}
+            horarioEditar={horarioEditar}
+            onClose={() => setHorarioEditar(null)}
+            onGuardado={() => { setHorarioEditar(null); cargarHorarios(profesionalId) }} />
+        )}
 
-      {/* Modal confirmar eliminar horario */}
-      {confirmarEliminarHorario && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-2">¿Eliminar horario?</h2>
-            <p className="text-gray-500 text-sm mb-6">Esta acción no se puede deshacer.</p>
-            <div className="flex gap-2">
-              <button onClick={() => setConfirmarEliminarHorario(null)}
-                className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2 text-sm hover:bg-gray-50">
-                Cancelar
-              </button>
-              <button onClick={confirmarYEliminarHorario}
-                className="flex-1 bg-red-500 text-white rounded-lg py-2 text-sm hover:bg-red-600">
-                Sí, eliminar
-              </button>
+        {confirmarEliminarHorario && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+              <h2 className="text-lg font-semibold text-gray-800 mb-2">¿Eliminar horario?</h2>
+              <p className="text-gray-500 text-sm mb-6">Esta acción no se puede deshacer.</p>
+              <div className="flex gap-2">
+                <button onClick={() => setConfirmarEliminarHorario(null)}
+                  className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2 text-sm hover:bg-gray-50">Cancelar</button>
+                <button onClick={confirmarYEliminarHorario}
+                  className="flex-1 bg-red-500 text-white rounded-lg py-2 text-sm hover:bg-red-600">Sí, eliminar</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Modal confirmar desactivar */}
-      {confirmarDesactivar && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-2">¿Desactivar usuario?</h2>
-            <p className="text-gray-500 text-sm mb-6">
-              ¿Estás seguro de que querés desactivar a <strong>{usuario.nombre}</strong>? Podrás restaurarlo después.
-            </p>
-            <div className="flex gap-2">
-              <button onClick={() => setConfirmarDesactivar(false)}
-                className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2 text-sm hover:bg-gray-50">
-                Cancelar
-              </button>
-              <button onClick={desactivarUsuario}
-                className="flex-1 bg-orange-500 text-white rounded-lg py-2 text-sm hover:bg-orange-600">
-                Sí, desactivar
-              </button>
+        {confirmarDesactivar && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+              <h2 className="text-lg font-semibold text-gray-800 mb-2">¿Desactivar usuario?</h2>
+              <p className="text-gray-500 text-sm mb-6">¿Estás seguro de que querés desactivar a <strong>{usuario.nombre}</strong>?</p>
+              <div className="flex gap-2">
+                <button onClick={() => setConfirmarDesactivar(false)}
+                  className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2 text-sm hover:bg-gray-50">Cancelar</button>
+                <button onClick={desactivarUsuario}
+                  className="flex-1 bg-orange-500 text-white rounded-lg py-2 text-sm hover:bg-orange-600">Sí, desactivar</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Modal confirmar eliminar usuario */}
-      {confirmarEliminar && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-2">¿Eliminar usuario?</h2>
-            <p className="text-gray-500 text-sm mb-6">
-              ¿Estás seguro de que querés eliminar permanentemente a <strong>{usuario.nombre}</strong>? Esta acción no se puede deshacer.
-            </p>
-            <div className="flex gap-2">
-              <button onClick={() => setConfirmarEliminar(false)}
-                className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2 text-sm hover:bg-gray-50">
-                Cancelar
-              </button>
-              <button onClick={eliminarUsuario}
-                className="flex-1 bg-red-500 text-white rounded-lg py-2 text-sm hover:bg-red-600">
-                Sí, eliminar
-              </button>
+        {confirmarEliminar && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+              <h2 className="text-lg font-semibold text-gray-800 mb-2">¿Eliminar usuario?</h2>
+              <p className="text-gray-500 text-sm mb-6">¿Estás seguro de que querés eliminar permanentemente a <strong>{usuario.nombre}</strong>?</p>
+              <div className="flex gap-2">
+                <button onClick={() => setConfirmarEliminar(false)}
+                  className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2 text-sm hover:bg-gray-50">Cancelar</button>
+                <button onClick={eliminarUsuario}
+                  className="flex-1 bg-red-500 text-white rounded-lg py-2 text-sm hover:bg-red-600">Sí, eliminar</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }
 
-// ─── Formulario horario ───────────────────────────────────────────────────────
+// ── Formulario horario ────────────────────────────────────────────────────────
 function FormularioHorario({ profesionalId, horariosExistentes, sucursales, horarioEditar, onClose, onGuardado }: {
-  profesionalId: string
-  horariosExistentes: Horario[]
-  sucursales: { id: string, nombre: string }[]
-  horarioEditar?: Horario | null
-  onClose: () => void
-  onGuardado: () => void
+  profesionalId: string; horariosExistentes: Horario[]
+  sucursales: { id: string; nombre: string }[]
+  horarioEditar?: Horario | null; onClose: () => void; onGuardado: () => void
 }) {
   const [form, setForm] = useState({
     sucursal_id: horarioEditar?.sucursal_id || sucursales[0]?.id || '',
@@ -589,8 +647,7 @@ function FormularioHorario({ profesionalId, horariosExistentes, sucursales, hora
 
   function verificarConflictoSucursal(): string | null {
     const otros = horariosExistentes.filter(h =>
-      h.sucursal_id !== form.sucursal_id &&
-      h.dia_semana === form.dia_semana &&
+      h.sucursal_id !== form.sucursal_id && h.dia_semana === form.dia_semana &&
       (!horarioEditar || h.id !== horarioEditar.id)
     )
     for (const h of otros) {
@@ -604,8 +661,7 @@ function FormularioHorario({ profesionalId, horariosExistentes, sucursales, hora
 
   async function unificarSiCorresponde(): Promise<boolean> {
     const mismos = horariosExistentes.filter(h =>
-      h.sucursal_id === form.sucursal_id &&
-      h.dia_semana === form.dia_semana &&
+      h.sucursal_id === form.sucursal_id && h.dia_semana === form.dia_semana &&
       (!horarioEditar || h.id !== horarioEditar.id)
     )
     const tieneMañana = mismos.find(h => h.turno === 'mañana')
@@ -613,37 +669,25 @@ function FormularioHorario({ profesionalId, horariosExistentes, sucursales, hora
 
     if (form.turno === 'tarde' && tieneMañana) {
       await supabase.from('profesional_horarios').delete().eq('id', tieneMañana.id)
-      await supabase.from('profesional_horarios').insert({
-        profesional_id: profesionalId, sucursal_id: form.sucursal_id,
-        dia_semana: form.dia_semana, turno: 'completo',
-        hora_inicio: '08:00', hora_fin: '20:00', activo: true
-      })
+      await supabase.from('profesional_horarios').insert({ profesional_id: profesionalId, sucursal_id: form.sucursal_id, dia_semana: form.dia_semana, turno: 'completo', hora_inicio: '08:00', hora_fin: '20:00', activo: true })
       return true
     }
     if (form.turno === 'mañana' && tieneTarde) {
       await supabase.from('profesional_horarios').delete().eq('id', tieneTarde.id)
-      await supabase.from('profesional_horarios').insert({
-        profesional_id: profesionalId, sucursal_id: form.sucursal_id,
-        dia_semana: form.dia_semana, turno: 'completo',
-        hora_inicio: '08:00', hora_fin: '20:00', activo: true
-      })
+      await supabase.from('profesional_horarios').insert({ profesional_id: profesionalId, sucursal_id: form.sucursal_id, dia_semana: form.dia_semana, turno: 'completo', hora_inicio: '08:00', hora_fin: '20:00', activo: true })
       return true
     }
     return false
   }
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setLoading(true); setError('')
-
+    e.preventDefault(); setLoading(true); setError('')
     const conflicto = verificarConflictoSucursal()
     if (conflicto) { setError(conflicto); setLoading(false); return }
-
     if (!horarioEditar) {
       const unificado = await unificarSiCorresponde()
       if (unificado) { onGuardado(); return }
     }
-
     if (horarioEditar?.id) {
       const { error: err } = await supabase.from('profesional_horarios').update({
         sucursal_id: form.sucursal_id, dia_semana: form.dia_semana,
@@ -651,28 +695,17 @@ function FormularioHorario({ profesionalId, horariosExistentes, sucursales, hora
       }).eq('id', horarioEditar.id)
       if (err) { setError('Error al guardar'); setLoading(false); return }
     } else {
-      const { error: err } = await supabase.from('profesional_horarios').insert({
-        ...form, profesional_id: profesionalId, activo: true
-      })
-      if (err) {
-        setError(err.message.includes('unique')
-          ? 'Ya existe un horario para ese día y turno en esa sucursal'
-          : `Error al guardar: ${err.message}`)
-        setLoading(false); return
-      }
+      const { error: err } = await supabase.from('profesional_horarios').insert({ ...form, profesional_id: profesionalId, activo: true })
+      if (err) { setError(err.message.includes('unique') ? 'Ya existe un horario para ese día y turno en esa sucursal' : `Error: ${err.message}`); setLoading(false); return }
     }
-
-    onGuardado()
-    setLoading(false)
+    onGuardado(); setLoading(false)
   }
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold text-gray-800">
-            {horarioEditar ? 'Editar horario' : 'Agregar horario'}
-          </h2>
+          <h2 className="text-lg font-semibold text-gray-800">{horarioEditar ? 'Editar horario' : 'Agregar horario'}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -687,12 +720,7 @@ function FormularioHorario({ profesionalId, horariosExistentes, sucursales, hora
             <label className="block text-sm font-medium text-gray-700 mb-1">Día</label>
             <select value={form.dia_semana} onChange={e => setForm({ ...form, dia_semana: Number(e.target.value) })}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value={1}>Lunes</option>
-              <option value={2}>Martes</option>
-              <option value={3}>Miércoles</option>
-              <option value={4}>Jueves</option>
-              <option value={5}>Viernes</option>
-              <option value={6}>Sábado</option>
+              {[1,2,3,4,5,6].map(d => <option key={d} value={d}>{DIAS[d]}</option>)}
             </select>
           </div>
           <div>
@@ -716,16 +744,10 @@ function FormularioHorario({ profesionalId, horariosExistentes, sucursales, hora
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
           </div>
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-              <p className="text-red-600 text-sm">{error}</p>
-            </div>
-          )}
+          {error && <div className="bg-red-50 border border-red-200 rounded-lg p-3"><p className="text-red-600 text-sm">{error}</p></div>}
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose}
-              className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2 text-sm hover:bg-gray-50">
-              Cancelar
-            </button>
+              className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2 text-sm hover:bg-gray-50">Cancelar</button>
             <button type="submit" disabled={loading}
               className="flex-1 bg-blue-600 text-white rounded-lg py-2 text-sm hover:bg-blue-700 disabled:opacity-50">
               {loading ? 'Guardando...' : 'Guardar'}
