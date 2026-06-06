@@ -74,7 +74,7 @@ export default function Usuarios() {
     cargarDatos()
   }
 
-  const puedeGestionar = rolUsuarioActual === 'super_admin' || rolUsuarioActual === 'jefe_clinica'
+  const puedeGestionar = rolUsuarioActual === 'super_admin'
 
   const etiquetaRol: Record<string, string> = {
     super_admin: '👑 Super Admin',
