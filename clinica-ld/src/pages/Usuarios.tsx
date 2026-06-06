@@ -31,6 +31,7 @@ export default function Usuarios() {
   const [especialidades, setEspecialidades] = useState<Especialidad[]>([])
   const [sucursales, setSucursales] = useState<Sucursal[]>([])
   const [verDesactivados, setVerDesactivados] = useState(false)
+  const [tabActivo, setTabActivo] = useState<'profesionales' | 'administrativos'>('profesionales')
   const [desactivados, setDesactivados] = useState<Usuario[]>([])
   const navigate = useNavigate()
 
@@ -73,7 +74,7 @@ export default function Usuarios() {
     cargarDatos()
   }
 
-  const puedeGestionar = rolUsuarioActual === 'super_admin' || rolUsuarioActual === 'jefe_clinica'
+  const puedeGestionar = rolUsuarioActual === 'super_admin'
 
   const etiquetaRol: Record<string, string> = {
     super_admin: '👑 Super Admin',
@@ -85,7 +86,13 @@ export default function Usuarios() {
     supervisora: '👁️ Supervisora',
   }
 
-  const usuariosFiltrados = usuarios.filter(u =>
+  const usuariosPorTab = usuarios.filter(u =>
+    tabActivo === 'profesionales'
+      ? u.rol === 'profesional'
+      : ['secretaria', 'jefe_clinica', 'super_admin'].includes(u.rol)
+  )
+
+  const usuariosFiltrados = usuariosPorTab.filter(u =>
     u.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
     u.email.toLowerCase().includes(busqueda.toLowerCase())
   )
@@ -113,7 +120,26 @@ export default function Usuarios() {
           )}
         </div>
       </div>
-
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={() => setTabActivo('profesionales')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${tabActivo === 'profesionales'
+            ? 'bg-blue-600 text-white border-blue-600'
+            : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+            }`}
+        >
+          🦷 Profesionales
+        </button>
+        <button
+          onClick={() => setTabActivo('administrativos')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${tabActivo === 'administrativos'
+            ? 'bg-blue-600 text-white border-blue-600'
+            : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+            }`}
+        >
+          💼 Administrativos
+        </button>
+      </div>
       <div className="relative mb-4">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input
@@ -289,18 +315,16 @@ function FormularioUsuario({
           <button
             type="button"
             onClick={() => { setTipo('administrativo'); setForm(f => ({ ...f, rol: 'secretaria' })) }}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
-              tipo === 'administrativo' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-            }`}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${tipo === 'administrativo' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+              }`}
           >
             Administrativo
           </button>
           <button
             type="button"
             onClick={() => { setTipo('profesional'); setForm(f => ({ ...f, rol: 'profesional' })) }}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
-              tipo === 'profesional' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-            }`}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${tipo === 'profesional' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+              }`}
           >
             Profesional
           </button>
