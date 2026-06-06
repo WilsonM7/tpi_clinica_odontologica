@@ -62,21 +62,21 @@ const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
 const ROLES_PUEDEN_MODIFICAR = ['super_admin', 'jefe_clinica', 'secretaria', 'telemarketer', 'supervisora']
 
 const ESTADOS = [
-  { value: 'ofrecido',     label: 'Ofrecido',     clase: 'bg-yellow-100 border-yellow-400 text-yellow-800' },
-  { value: 'agendado',     label: 'Agendado',     clase: 'bg-green-100 border-green-400 text-green-800' },
-  { value: 'confirmado',   label: 'Confirmado',   clase: 'bg-green-100 border-green-400 text-green-800' },
-  { value: 'atendido',     label: 'Atendido',     clase: 'bg-green-200 border-green-600 text-green-900' },
-  { value: 'ausente',      label: 'Ausente',      clase: 'bg-red-100 border-red-400 text-red-700' },
+  { value: 'ofrecido', label: 'Ofrecido', clase: 'bg-yellow-100 border-yellow-400 text-yellow-800' },
+  { value: 'agendado', label: 'Agendado', clase: 'bg-green-100 border-green-400 text-green-800' },
+  { value: 'confirmado', label: 'Confirmado', clase: 'bg-green-100 border-green-400 text-green-800' },
+  { value: 'atendido', label: 'Atendido', clase: 'bg-green-200 border-green-600 text-green-900' },
+  { value: 'ausente', label: 'Ausente', clase: 'bg-red-100 border-red-400 text-red-700' },
   { value: 'reprogramado', label: 'Reprogramado', clase: 'bg-red-50 border-red-300 text-red-500' },
-  { value: 'pendiente',    label: 'Pendiente',    clase: 'bg-blue-100 border-blue-400 text-blue-800' },
+  { value: 'pendiente', label: 'Pendiente', clase: 'bg-blue-100 border-blue-400 text-blue-800' },
 ]
 
 const RADIO_ESTADOS = [
-  { value: 'realizada',    label: 'Realizada',    clase: 'bg-green-100 text-green-700',     dot: 'bg-green-500' },
-  { value: 'traer',        label: 'Traer',        clase: 'bg-yellow-100 text-yellow-700',   dot: 'bg-yellow-500' },
-  { value: 'no_realizada', label: 'No realizada', clase: 'bg-red-100 text-red-700',         dot: 'bg-red-500' },
-  { value: 'pedir',        label: 'Pedir',        clase: 'bg-emerald-100 text-emerald-800', dot: 'bg-emerald-700' },
-  { value: 'pedir_ambas',  label: 'Pedir ambas',  clase: 'bg-emerald-100 text-emerald-800', dot: 'bg-emerald-700' },
+  { value: 'realizada', label: 'Realizada', clase: 'bg-green-100 text-green-700', dot: 'bg-green-500' },
+  { value: 'traer', label: 'Traer', clase: 'bg-yellow-100 text-yellow-700', dot: 'bg-yellow-500' },
+  { value: 'no_realizada', label: 'No realizada', clase: 'bg-red-100 text-red-700', dot: 'bg-red-500' },
+  { value: 'pedir', label: 'Pedir', clase: 'bg-emerald-100 text-emerald-800', dot: 'bg-emerald-700' },
+  { value: 'pedir_ambas', label: 'Pedir ambas', clase: 'bg-emerald-100 text-emerald-800', dot: 'bg-emerald-700' },
 ]
 
 function normHora(h: string): string { return h ? h.substring(0, 5) : '' }
@@ -122,7 +122,6 @@ export default function Agenda() {
   const [profesionales, setProfesionales] = useState<Profesional[]>([])
   const [especialidades, setEspecialidades] = useState<Especialidad[]>([])
   const [sucursales, setSucursales] = useState<Sucursal[]>([])
-  // nombre único para el state de consultorios del componente padre
   const [consultorios, setConsultorios] = useState<Consultorio[]>([])
   const [sucursalId, setSucursalId] = useState('')
   const [profesionalFiltro, setProfesionalFiltro] = useState('')
@@ -165,8 +164,8 @@ export default function Agenda() {
 
   function getRango(v: Vista, fecha: Date): { desde: Date; hasta: Date } {
     if (v === 'dia') {
-      const desde = new Date(fecha); desde.setHours(0,0,0,0)
-      const hasta = new Date(fecha); hasta.setHours(23,59,59,999)
+      const desde = new Date(fecha); desde.setHours(0, 0, 0, 0)
+      const hasta = new Date(fecha); hasta.setHours(23, 59, 59, 999)
       return { desde, hasta }
     }
     if (v === 'semana') return {
@@ -424,10 +423,10 @@ export default function Agenda() {
               {t.pacientes?.apellido_nombre}
             </p>
             {(t.practicas?.nombre || t.notas) && (
-  <p className="truncate opacity-75 leading-tight">
-    {t.practicas?.nombre || t.notas}
-  </p>
-)}
+              <p className="truncate opacity-75 leading-tight">
+                {t.practicas?.nombre || t.notas}
+              </p>
+            )}
           </div>
           {!compact && (
             <div className="flex gap-0.5 flex-shrink-0">
@@ -460,14 +459,14 @@ export default function Agenda() {
               const bg = diaInh
                 ? 'bg-orange-50 cursor-not-allowed'
                 : !habilitada
-                ? 'bg-red-50 cursor-not-allowed'
-                : soloLibres && tieneturno
-                ? 'bg-red-100 cursor-not-allowed'
-                : tieneturno
-                ? ''
-                : puedeModificar
-                ? 'cursor-pointer hover:bg-blue-50'
-                : 'cursor-default'
+                  ? 'bg-red-50 cursor-not-allowed'
+                  : soloLibres && tieneturno
+                    ? 'bg-red-100 cursor-not-allowed'
+                    : tieneturno
+                      ? ''
+                      : puedeModificar
+                        ? 'cursor-pointer hover:bg-blue-50'
+                        : 'cursor-default'
 
               return (
                 <div key={con.id}
@@ -695,11 +694,6 @@ export default function Agenda() {
       )}
 
       <div className="flex flex-1 overflow-hidden">
-        {miniCalAbierto && (
-          <div className="w-44 flex-shrink-0 border-r border-gray-200 bg-white p-3 overflow-y-auto">
-            <MiniCalendario fecha={fechaActual} onSelect={setFechaActual} />
-          </div>
-        )}
         <div className="flex-1 flex flex-col overflow-hidden">
           {vista === 'dia' && <VistaDia />}
           {vista === 'semana' && <VistaSemana />}
@@ -773,6 +767,11 @@ export default function Agenda() {
             </div>
           )}
         </div>
+        {miniCalAbierto && (
+          <div className="w-44 flex-shrink-0 border-l border-gray-200 bg-white p-3 overflow-y-auto">
+            <MiniCalendario fecha={fechaActual} onSelect={setFechaActual} />
+          </div>
+        )}
       </div>
 
       {mostrarFormTurno && (
@@ -942,7 +941,6 @@ function FormularioTurno({ fechaHora, sucursalId, consultorioPreseleccionado, ho
     ]).then(([{ data: profs }, { data: pracs }]) => {
       let profsFiltrados = profs || []
 
-      // Filtrar profesionales con horario activo ese día y hora, sin ausencias
       if (dt && diaSemana >= 0 && hora) {
         const profsConHorario = new Set(
           horariosProf
@@ -968,27 +966,29 @@ function FormularioTurno({ fechaHora, sucursalId, consultorioPreseleccionado, ho
       setPracticasFiltradas(pracs || [])
     })
   }, [])
-useEffect(() => {
-  if (!form.paciente_id) { setTratamientosPaciente([]); setAdvertenciaProf(''); return }
-  supabase.from('tratamientos')
-    .select('profesional_id, tipo_material, profesionales(usuarios(nombre))')
-    .eq('paciente_id', form.paciente_id)
-    .in('estado', ['en tratamiento', 'en finalizacion'])
-    .then(({ data }) => setTratamientosPaciente(data || []))
-}, [form.paciente_id])
 
-useEffect(() => {
-  if (form.practica_id !== CONTROL_AGENDA_ID || !form.profesional_id || tratamientosPaciente.length === 0) {
-    setAdvertenciaProf(''); return
-  }
-  const tto = tratamientosPaciente[0]
-  if (tto && tto.profesional_id !== form.profesional_id) {
-    const nombre = tto.profesionales?.usuarios?.nombre || 'otro profesional'
-    setAdvertenciaProf(`Este paciente sigue su tratamiento con ${nombre}. ¿Desea agendarlo de todas formas?`)
-  } else {
-    setAdvertenciaProf('')
-  }
-}, [form.practica_id, form.profesional_id, tratamientosPaciente])
+  useEffect(() => {
+    if (!form.paciente_id) { setTratamientosPaciente([]); setAdvertenciaProf(''); return }
+    supabase.from('tratamientos')
+      .select('profesional_id, tipo_material, profesionales(usuarios(nombre))')
+      .eq('paciente_id', form.paciente_id)
+      .in('estado', ['en tratamiento', 'en finalizacion'])
+      .then(({ data }) => setTratamientosPaciente(data || []))
+  }, [form.paciente_id])
+
+  useEffect(() => {
+    if (form.practica_id !== CONTROL_AGENDA_ID || !form.profesional_id || tratamientosPaciente.length === 0) {
+      setAdvertenciaProf(''); return
+    }
+    const tto = tratamientosPaciente[0]
+    if (tto && tto.profesional_id !== form.profesional_id) {
+      const nombre = tto.profesionales?.usuarios?.nombre || 'otro profesional'
+      setAdvertenciaProf(`Este paciente sigue su tratamiento con ${nombre}. ¿Desea agendarlo de todas formas?`)
+    } else {
+      setAdvertenciaProf('')
+    }
+  }, [form.practica_id, form.profesional_id, tratamientosPaciente])
+
   async function handleProfesionalChange(profesionalId: string) {
     setForm(f => ({ ...f, profesional_id: profesionalId, practica_id: '' }))
     if (!profesionalId) {
@@ -1052,62 +1052,62 @@ useEffect(() => {
   }
 
   async function validarConsultorioLibreParaProfesional(): Promise<string | null> {
-  if (!form.consultorio_id || !form.profesional_id || !form.fecha_hora) return null
-  const dt = new Date(form.fecha_hora)
-  const fechaStr = format(dt, 'yyyy-MM-dd')
-  const hora = `${dt.getHours().toString().padStart(2, '0')}:${dt.getMinutes().toString().padStart(2, '0')}`
-  const franja = franjaHoraria(hora)
-  const desdeUTC = toUTC(new Date(`${fechaStr}T00:00:00`))
-  const hastaUTC = toUTC(new Date(`${fechaStr}T23:59:59`))
-  const { data: turnosConsultorio } = await supabase
-    .from('turnos')
-    .select('profesional_id, fecha_hora')
-    .eq('consultorio_id', form.consultorio_id)
-    .gte('fecha_hora', desdeUTC)
-    .lte('fecha_hora', hastaUTC)
-    .neq('estado', 'cancelado')
-    .neq('estado', 'reprogramado')
-
-  if (!turnosConsultorio || turnosConsultorio.length === 0) return null
-
-  const turnosEnFranja = turnosConsultorio.filter(t => {
-    const horaLocal = toLocalAR(t.fecha_hora)
-    const horaStr = `${horaLocal.getHours().toString().padStart(2, '0')}:${horaLocal.getMinutes().toString().padStart(2, '0')}`
-    return franjaHoraria(horaStr) === franja
-  })
-
-  if (turnosEnFranja.length === 0) return null
-
-  const profExistente = turnosEnFranja[0].profesional_id
-  if (profExistente !== form.profesional_id) {
-    const consultoriosOcupados = new Set<string>()
-    const { data: todosLosTurnos } = await supabase
+    if (!form.consultorio_id || !form.profesional_id || !form.fecha_hora) return null
+    const dt = new Date(form.fecha_hora)
+    const fechaStr = format(dt, 'yyyy-MM-dd')
+    const hora = `${dt.getHours().toString().padStart(2, '0')}:${dt.getMinutes().toString().padStart(2, '0')}`
+    const franja = franjaHoraria(hora)
+    const desdeUTC = toUTC(new Date(`${fechaStr}T00:00:00`))
+    const hastaUTC = toUTC(new Date(`${fechaStr}T23:59:59`))
+    const { data: turnosConsultorio } = await supabase
       .from('turnos')
-      .select('consultorio_id, fecha_hora')
+      .select('profesional_id, fecha_hora')
+      .eq('consultorio_id', form.consultorio_id)
       .gte('fecha_hora', desdeUTC)
       .lte('fecha_hora', hastaUTC)
       .neq('estado', 'cancelado')
       .neq('estado', 'reprogramado')
 
-    ;(todosLosTurnos || []).forEach(t => {
+    if (!turnosConsultorio || turnosConsultorio.length === 0) return null
+
+    const turnosEnFranja = turnosConsultorio.filter(t => {
       const horaLocal = toLocalAR(t.fecha_hora)
       const horaStr = `${horaLocal.getHours().toString().padStart(2, '0')}:${horaLocal.getMinutes().toString().padStart(2, '0')}`
-      if (franjaHoraria(horaStr) === franja) consultoriosOcupados.add(t.consultorio_id)
+      return franjaHoraria(horaStr) === franja
     })
+
+    if (turnosEnFranja.length === 0) return null
+
+    const profExistente = turnosEnFranja[0].profesional_id
+    if (profExistente !== form.profesional_id) {
+      const consultoriosOcupados = new Set<string>()
+      const { data: todosLosTurnos } = await supabase
+        .from('turnos')
+        .select('consultorio_id, fecha_hora')
+        .gte('fecha_hora', desdeUTC)
+        .lte('fecha_hora', hastaUTC)
+        .neq('estado', 'cancelado')
+        .neq('estado', 'reprogramado')
+
+        ; (todosLosTurnos || []).forEach(t => {
+          const horaLocal = toLocalAR(t.fecha_hora)
+          const horaStr = `${horaLocal.getHours().toString().padStart(2, '0')}:${horaLocal.getMinutes().toString().padStart(2, '0')}`
+          if (franjaHoraria(horaStr) === franja) consultoriosOcupados.add(t.consultorio_id)
+        })
 
       const activos = profesionalesActivosEnFecha(dt, hora)
       const consultoriosLibres = consultorios
         .filter((c, idx) => idx < activos && !consultoriosOcupados.has(c.id))
         .map(c => c.nombre)
 
-    if (consultoriosLibres.length > 0) {
-      return `Ese consultorio ya está asignado a otro profesional. Consultorio${consultoriosLibres.length > 1 ? 's' : ''} libre${consultoriosLibres.length > 1 ? 's' : ''}: ${consultoriosLibres.join(', ')}`
+      if (consultoriosLibres.length > 0) {
+        return `Ese consultorio ya está asignado a otro profesional. Consultorio${consultoriosLibres.length > 1 ? 's' : ''} libre${consultoriosLibres.length > 1 ? 's' : ''}: ${consultoriosLibres.join(', ')}`
+      }
+      return 'Ese consultorio ya está asignado a otro profesional en esta franja horaria'
     }
-    return 'Ese consultorio ya está asignado a otro profesional en esta franja horaria'
-  }
 
-  return null
-}
+    return null
+  }
 
   async function validarConsultorioProfesional(): Promise<string | null> {
     if (!form.profesional_id || !form.consultorio_id || !form.fecha_hora) return null
@@ -1154,7 +1154,7 @@ useEffect(() => {
     if (errorConsultorioHab) { setError(errorConsultorioHab); setLoading(false); return }
 
     const errorConsultorioOcupado = await validarConsultorioLibreParaProfesional()
-    if (errorConsultorioOcupado) { setError(errorConsultorioOcupado); setLoading(false); return } 
+    if (errorConsultorioOcupado) { setError(errorConsultorioOcupado); setLoading(false); return }
 
     const errorConsultorio = await validarConsultorioProfesional()
     if (errorConsultorio) { setError(errorConsultorio); setLoading(false); return }
@@ -1172,7 +1172,7 @@ useEffect(() => {
       radiografia: form.radiografia || null, sucursal_id: sucursalId,
       fecha_hora: fechaUTC, duracion_minutos: form.duracion_minutos,
       notas: form.practica_id === CONTROL_AGENDA_ID && !form.notas ? 'Control de tratamiento' : form.notas,
-estado: form.estado,
+      estado: form.estado,
     })
     if (err) {
       setError(err.code === '23505' ? 'Ya existe un turno en ese consultorio a esa hora' : `Error: ${err.message}`)
@@ -1216,24 +1216,24 @@ estado: form.estado,
               {profesionales.map(p => <option key={p.id} value={p.id}>{p.usuarios?.nombre}</option>)}
             </select>
             {advertenciaProf && (
-  <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3 text-sm text-yellow-800 flex items-start gap-2">
-    <span>⚠️</span>
-    <span>{advertenciaProf}</span>
-  </div>
-)}
+              <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3 text-sm text-yellow-800 flex items-start gap-2">
+                <span>⚠️</span>
+                <span>{advertenciaProf}</span>
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Consultorio *</label>
             <select value={form.consultorio_id} onChange={e => setForm(f => ({ ...f, consultorio_id: e.target.value }))}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="">-- Seleccioná --</option>
-                {(() => {
-                  if (!form.fecha_hora) return consultorios
-                  const dt = new Date(form.fecha_hora)
-                  const hora = `${dt.getHours().toString().padStart(2, '0')}:${dt.getMinutes().toString().padStart(2, '0')}`
-                  const activos = profesionalesActivosEnFecha(dt, hora)
-                  return activos > 0 ? consultorios.slice(0, activos) : consultorios
-                })().map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              <option value="">-- Seleccioná --</option>
+              {(() => {
+                if (!form.fecha_hora) return consultorios
+                const dt = new Date(form.fecha_hora)
+                const hora = `${dt.getHours().toString().padStart(2, '0')}:${dt.getMinutes().toString().padStart(2, '0')}`
+                const activos = profesionalesActivosEnFecha(dt, hora)
+                return activos > 0 ? consultorios.slice(0, activos) : consultorios
+              })().map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select>
           </div>
           <div>
@@ -1244,8 +1244,8 @@ estado: form.estado,
             <select value={form.practica_id} onChange={e => setForm(f => ({ ...f, practica_id: e.target.value }))}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="">-- Sin práctica --</option>
-<option value={CONTROL_AGENDA_ID}>⭐ Control de tratamiento</option>
-{practicasFiltradas.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              <option value={CONTROL_AGENDA_ID}>⭐ Control de tratamiento</option>
+              {practicasFiltradas.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
             </select>
           </div>
           <div>
