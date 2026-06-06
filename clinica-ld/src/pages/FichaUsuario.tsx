@@ -249,7 +249,7 @@ export default function FichaUsuario() {
     setEspSeleccionadas(prev => prev.includes(espId) ? prev.filter(e => e !== espId) : [...prev, espId])
   }
 
-  const puedeGestionar = rolActual === 'super_admin' || rolActual === 'jefe_clinica'
+  const puedeGestionar = rolActual === 'super_admin'
   const puedeDesactivar = puedeGestionar && usuario?.rol !== 'super_admin'
   const puedeEliminar = rolActual === 'super_admin' && usuario?.rol !== 'super_admin'
 
