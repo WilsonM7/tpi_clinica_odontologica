@@ -48,7 +48,7 @@ export default function Dashboard() {
       <div className="max-w-4xl mx-auto p-8">
         <div className="mb-10">
           <h1 className="text-3xl font-bold text-gray-800">Home</h1>
-          <p className="text-gray-500 mt-1">Bienvenido al sistema de gestión de Ortodoncias L&D</p>
+          <p className="text-gray-500 mt-1">Bienvenido al sistema de gestión de Clinica Odontológica L&D</p>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
