@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import api from '../services/api'
 import { Search, Plus, X, Pencil } from 'lucide-react'
 
 type Practica = {
@@ -13,7 +14,7 @@ type Practica = {
   multa: number | null
   tipo_multa: 'fijo' | 'control' | null
   activa: boolean
-  especialidades?: { nombre: string }
+  especialidad?: { id: string; nombre: string; activa: boolean }
 }
 
 type Especialidad = {
@@ -47,28 +48,25 @@ export default function Practicas() {
 
   async function cargarDatos() {
     setLoading(true)
-    const [{ data: pracs }, { data: esps }] = await Promise.all([
-      supabase.from('practicas')
-        .select('*, especialidades(nombre)')
-        .eq('activa', true)
-        .order('codigo'),
-      supabase.from('especialidades').select('*').order('nombre')
-    ])
-    setPracticas(pracs || [])
-    setEspecialidades(esps || [])
-    setLoading(false)
+    try {
+      const [pracs, esps] = await Promise.all([
+        api.get<Practica[]>('/practicas?activa=true'),
+        api.get<Especialidad[]>('/especialidades'),
+      ])
+      setPracticas(pracs || [])
+      setEspecialidades(esps || [])
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function cargarDesactivadas() {
-    const { data } = await supabase.from('practicas')
-      .select('*, especialidades(nombre)')
-      .eq('activa', false)
-      .order('codigo')
+    const data = await api.get<Practica[]>('/practicas?activa=false')
     setDesactivadas(data || [])
   }
 
   async function restaurarPractica(id: string) {
-    await supabase.from('practicas').update({ activa: true }).eq('id', id)
+    await api.put(`/practicas/${id}`, { activa: true })
     cargarDesactivadas()
     cargarDatos()
   }
@@ -78,7 +76,7 @@ export default function Practicas() {
   const practicasFiltradas = practicas.filter(p =>
     p.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
     p.codigo.toLowerCase().includes(busqueda.toLowerCase()) ||
-    (p.especialidades?.nombre || '').toLowerCase().includes(busqueda.toLowerCase())
+    (p.especialidad?.nombre || '').toLowerCase().includes(busqueda.toLowerCase())
   )
 
   function formatPrecio(v: number | null) {
@@ -144,7 +142,7 @@ export default function Practicas() {
                 <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="px-4 py-3 text-gray-500 font-mono text-xs">{p.codigo}</td>
                   <td className="px-4 py-3 font-medium text-gray-800">{p.nombre}</td>
-                  <td className="px-4 py-3 text-gray-600">{p.especialidades?.nombre || '-'}</td>
+                  <td className="px-4 py-3 text-gray-600">{p.especialidad?.nombre || '-'}</td>
                   <td className="px-4 py-3 text-gray-800">{formatPrecio(p.valor)}</td>
                   <td className="px-4 py-3 text-gray-600">
                     {p.multa ? (
@@ -209,7 +207,7 @@ export default function Practicas() {
                   <div key={p.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                     <div>
                       <p className="text-sm font-medium text-gray-800">{p.nombre}</p>
-                      <p className="text-xs text-gray-500">{p.codigo} · {p.especialidades?.nombre || 'Sin especialidad'}</p>
+                      <p className="text-xs text-gray-500">{p.codigo} · {p.especialidad?.nombre || 'Sin especialidad'}</p>
                     </div>
                     <button
                       onClick={() => restaurarPractica(p.id)}
@@ -248,14 +246,6 @@ function FormularioPractica({ practica, especialidades, onClose, onGuardado }: {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  // Generar código automático: busca el más alto y suma 1, formato 00001
-  async function generarCodigo(): Promise<string> {
-    const { data } = await supabase.from('practicas').select('codigo').order('codigo', { ascending: false }).limit(1)
-    if (!data || data.length === 0) return '00001'
-    const ultimo = parseInt(data[0].codigo) || 0
-    return (ultimo + 1).toString().padStart(5, '0')
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
@@ -276,23 +266,29 @@ function FormularioPractica({ practica, especialidades, onClose, onGuardado }: {
       tipo_multa: form.tipo_multa || null,
     }
 
-    if (esEdicion) {
-      const { error: err } = await supabase.from('practicas').update(datos).eq('id', practica!.id)
-      if (err) { setError('Error al actualizar: ' + err.message); setLoading(false); return }
-    } else {
-      const codigo = await generarCodigo()
-      const { error: err } = await supabase.from('practicas').insert({ ...datos, codigo, activa: true })
-      if (err) { setError('Error al guardar: ' + err.message); setLoading(false); return }
+    try {
+      if (esEdicion) {
+        await api.put(`/practicas/${practica!.id}`, datos)
+      } else {
+        await api.post('/practicas', datos)
+      }
+      onGuardado()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error al guardar'
+      setError(msg)
     }
-
-    onGuardado()
     setLoading(false)
   }
 
   async function desactivar() {
     if (!practica) return
-    await supabase.from('practicas').update({ activa: false }).eq('id', practica.id)
-    onGuardado()
+    try {
+      await api.delete(`/practicas/${practica.id}`)
+      onGuardado()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error al desactivar'
+      setError(msg)
+    }
   }
 
   return (

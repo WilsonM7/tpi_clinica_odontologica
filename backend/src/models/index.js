@@ -1,8 +1,8 @@
 const { sequelize } = require('../config/database')
+const Especialidad = require('./Especialidad')
+const Practica = require('./Practica')
 
-// Los modelos se importarán aquí a medida que se vayan creando en próximas fases.
-// Ejemplo:
-//   const Paciente = require('./Paciente')
-//   const Usuario = require('./Usuario')
+Especialidad.hasMany(Practica, { foreignKey: 'especialidad_id', as: 'practicas' })
+Practica.belongsTo(Especialidad, { foreignKey: 'especialidad_id', as: 'especialidad' })
 
-module.exports = { sequelize }
+module.exports = { sequelize, Especialidad, Practica }
