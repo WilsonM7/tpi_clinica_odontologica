@@ -1,4 +1,4 @@
-const { Cobro, Paciente, Tratamiento } = require('../models/index')
+const { Cobro, Paciente, Tratamiento, Practica } = require('../models/index')
 
 async function listar(req, res, next) {
   try {
@@ -9,7 +9,12 @@ async function listar(req, res, next) {
       where,
       include: [
         { model: Paciente, as: 'paciente', attributes: ['id', 'nombre', 'apellido', 'dni'] },
-        { model: Tratamiento, as: 'tratamiento', attributes: ['id', 'fecha', 'estado', 'monto'] },
+        {
+          model: Tratamiento,
+          as: 'tratamiento',
+          attributes: ['id', 'fecha', 'estado', 'monto'],
+          include: [{ model: Practica, as: 'practica', attributes: ['id', 'nombre'] }],
+        },
       ],
       order: [['fecha', 'DESC']],
     })

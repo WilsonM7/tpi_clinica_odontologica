@@ -44,6 +44,18 @@ const Paciente = sequelize.define('paciente', {
     type: DataTypes.STRING,
     allowNull: true,
   },
+  como_conocio: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  fecha_ingreso: {
+    type: DataTypes.DATEONLY,
+    allowNull: true,
+  },
+  ciudad: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
   activo: {
     type: DataTypes.BOOLEAN,
     defaultValue: true,

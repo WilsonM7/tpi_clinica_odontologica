@@ -19,7 +19,7 @@ const {
 } = require('../models/index')
 
 async function seed() {
-  await sequelize.sync()
+  await sequelize.sync({ force: false })
 
   // ── Especialidades ────────────────────────────────────────────────────────
   const [ortodoncia] = await Especialidad.findOrCreate({
