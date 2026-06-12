@@ -85,9 +85,10 @@ export default function Practicas() {
   }
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-semibold text-gray-800">Prácticas</h1>
+    <div className="h-full overflow-y-auto">
+    <div className="p-6">
+      <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-100">
+        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Prácticas</h1>
         <div className="flex gap-2">
           {puedeGestionar && (
             <button
@@ -222,6 +223,7 @@ export default function Practicas() {
           </div>
         </div>
       )}
+    </div>
     </div>
   )
 }

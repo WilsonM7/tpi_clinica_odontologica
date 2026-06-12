@@ -30,7 +30,10 @@ function App() {
       setSession(session)
       setLoading(false)
     })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN') {
+        window.history.replaceState({}, '', '/')
+      }
       setSession(session)
     })
     return () => subscription.unsubscribe()

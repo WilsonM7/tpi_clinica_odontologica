@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import api from '../services/api'
 import {
   ChevronLeft, ChevronRight, Search, SlidersHorizontal, X,
-  BanIcon, MessageCircle, UserRound, PanelLeftClose, PanelLeftOpen
+  BanIcon, MessageCircle, UserRound, PanelRightClose, PanelRightOpen
 } from 'lucide-react'
 import {
   format, addDays, addWeeks, addMonths, addYears,
@@ -571,11 +571,6 @@ export default function Agenda() {
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-2 px-4 py-2 bg-white border-b border-gray-200 flex-shrink-0">
-        <button onClick={() => setMiniCalAbierto(!miniCalAbierto)}
-          className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 flex-shrink-0"
-          title={miniCalAbierto ? 'Ocultar calendario' : 'Mostrar calendario'}>
-          {miniCalAbierto ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
-        </button>
         <button onClick={() => setFechaActual(new Date())}
           className="px-3 py-1 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 flex-shrink-0">Hoy</button>
         <button onClick={() => navegar(-1)} className="p-1.5 hover:bg-gray-100 rounded-lg flex-shrink-0"><ChevronLeft size={16} /></button>
@@ -608,6 +603,14 @@ export default function Agenda() {
           <option value="mes">Mes</option>
           <option value="año">Año</option>
         </select>
+        <button onClick={() => setMiniCalAbierto(!miniCalAbierto)}
+          className={`p-1.5 hover:bg-gray-100 rounded-lg flex-shrink-0 ${miniCalAbierto ? 'bg-blue-50' : ''}`}
+          title={miniCalAbierto ? 'Ocultar calendario lateral' : 'Mostrar calendario lateral'}
+          aria-label={miniCalAbierto ? 'Ocultar calendario lateral' : 'Mostrar calendario lateral'}>
+          {miniCalAbierto
+            ? <PanelRightClose size={18} className="text-blue-600" />
+            : <PanelRightOpen size={18} className="text-gray-500" />}
+        </button>
       </div>
 
       {mostrarBusqueda && (
