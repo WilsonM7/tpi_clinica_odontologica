@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import api from '../services/api'
 import { ArrowLeft, Save, X, Pencil } from 'lucide-react'
 
 type Paciente = {
@@ -20,29 +21,25 @@ type Paciente = {
 type Cobro = {
   id: string
   fecha: string
-  subtotal: number
-  multa: number
-  deuda_anterior: number
-  total: number
+  monto: number
   medio_pago: string
-  monto_pagado: number
-  diferencia: number
-  practicas?: { nombre: string }
+  descripcion: string
+  tratamiento?: {
+    practica?: { nombre: string }
+  }
 }
 
 type Tratamiento = {
   id: string
   estado: string
-  tipo_material: string
-  tipo_tto: string
-  fecha_inicio: string
-  cuota_base: number
-  profesional_id: string
-  especialidades: { nombre: string }
-  profesionales: { nombre_corto: string; id: string; usuarios: { nombre: string } }
+  fecha: string
+  monto: number | null
+  profesional_id: string | null
+  practica?: { nombre: string }
+  profesional?: { id: string; nombre: string; apellido: string }
 }
 
-type Profesional = { id: string; usuarios: { nombre: string } }
+type Profesional = { id: string; nombre: string; apellido: string }
 
 const ESTADOS_TRATAMIENTO = [
   'en tratamiento',
@@ -55,6 +52,32 @@ function formatFecha(fecha: string) {
   if (!fecha) return '-'
   const [anio, mes, dia] = fecha.split('-')
   return `${dia}/${mes}/${anio}`
+}
+
+function splitApellidoNombre(apellidoNombre: string): { apellido: string; nombre: string } {
+  const idx = apellidoNombre.indexOf(',')
+  if (idx !== -1) {
+    return {
+      apellido: apellidoNombre.slice(0, idx).trim(),
+      nombre: apellidoNombre.slice(idx + 1).trim(),
+    }
+  }
+  const spIdx = apellidoNombre.indexOf(' ')
+  if (spIdx !== -1) {
+    return {
+      apellido: apellidoNombre.slice(0, spIdx).trim(),
+      nombre: apellidoNombre.slice(spIdx + 1).trim(),
+    }
+  }
+  return { apellido: apellidoNombre.trim(), nombre: apellidoNombre.trim() }
+}
+
+function mapPacienteAPI(raw: any): Paciente {
+  return {
+    ...raw,
+    apellido_nombre: raw.apellido_nombre
+      || (raw.apellido && raw.nombre ? `${raw.apellido}, ${raw.nombre}` : raw.apellido || raw.nombre || ''),
+  }
 }
 
 export default function FichaPaciente() {
@@ -73,7 +96,6 @@ export default function FichaPaciente() {
   const [confirmarDesactivar, setConfirmarDesactivar] = useState(false)
   const [rolUsuario, setRolUsuario] = useState('')
 
-  // Estado para edición de tratamiento
   const [editandoTratamiento, setEditandoTratamiento] = useState<string | null>(null)
   const [formTratamiento, setFormTratamiento] = useState<{ estado: string; profesional_id: string }>({ estado: '', profesional_id: '' })
   const [guardandoTratamiento, setGuardandoTratamiento] = useState(false)
@@ -93,37 +115,54 @@ export default function FichaPaciente() {
   }
 
   async function cargarProfesionales() {
-    const { data } = await supabase.from('profesionales')
-      .select('id, usuarios(nombre)').eq('activo', true)
-    setProfesionales(data || [])
+    try {
+      const data = await api.get<Profesional[]>('/profesionales?activo=true')
+      setProfesionales(data)
+    } catch {
+      setProfesionales([])
+    }
   }
 
   async function cargarDatos() {
     setLoading(true)
-    const [{ data: pac }, { data: cob }, { data: tra }] = await Promise.all([
-      supabase.from('pacientes').select('*').eq('id', id).single(),
-      supabase.from('cobros')
-        .select('*, practicas!practica_id(nombre)')
-        .eq('paciente_id', id)
-        .order('fecha', { ascending: false }),
-      supabase.from('tratamientos')
-        .select('*, especialidades(nombre), profesionales(id, nombre_corto, usuarios(nombre))')
-        .eq('paciente_id', id)
-        .order('fecha_inicio', { ascending: false })
-    ])
-    setPaciente(pac)
-    setForm(pac || {})
-    setCobros(cob || [])
-    setTratamientos(tra || [])
+    try {
+      const [pacRaw, cob, tra] = await Promise.all([
+        api.get<any>(`/pacientes/${id}`),
+        api.get<Cobro[]>(`/cobros?paciente_id=${id}`),
+        api.get<Tratamiento[]>(`/tratamientos?paciente_id=${id}`),
+      ])
+      const pac = mapPacienteAPI(pacRaw)
+      setPaciente(pac)
+      setForm(pac)
+      setCobros(cob)
+      setTratamientos(tra)
+    } catch {
+      setPaciente(null)
+    }
     setLoading(false)
   }
 
   async function guardarCambios() {
     setGuardando(true)
     setError('')
-    const { error } = await supabase.from('pacientes').update(form).eq('id', id)
-    if (error) setError('Error al guardar')
-    else { setPaciente(form as Paciente); setEditando(false) }
+    try {
+      const { apellido, nombre } = splitApellidoNombre(form.apellido_nombre || '')
+      await api.put(`/pacientes/${id}`, {
+        nombre,
+        apellido,
+        telefono: form.telefono,
+        email: form.email,
+        como_conocio: form.como_conocio,
+        fecha_nacimiento: form.fecha_nacimiento,
+        fecha_ingreso: form.fecha_ingreso,
+        direccion: form.direccion,
+        ciudad: form.ciudad,
+      })
+      setPaciente(form as Paciente)
+      setEditando(false)
+    } catch {
+      setError('Error al guardar')
+    }
     setGuardando(false)
   }
 
@@ -134,31 +173,38 @@ export default function FichaPaciente() {
 
   async function guardarTratamiento(tId: string) {
     setGuardandoTratamiento(true)
-    const { error } = await supabase.from('tratamientos')
-      .update({ estado: formTratamiento.estado, profesional_id: formTratamiento.profesional_id || null })
-      .eq('id', tId)
-    if (!error) {
+    try {
+      await api.put(`/tratamientos/${tId}`, {
+        estado: formTratamiento.estado,
+        profesional_id: formTratamiento.profesional_id || null,
+      })
       await cargarDatos()
       setEditandoTratamiento(null)
-    }
+    } catch { /* ignorar */ }
     setGuardandoTratamiento(false)
   }
 
   async function desactivarPaciente() {
-    const { error } = await supabase.from('pacientes').update({ activo: false }).eq('id', id)
-    if (!error) navigate('/pacientes')
-    else setError('Error al desactivar')
+    try {
+      await api.put(`/pacientes/${id}`, { activo: false })
+      navigate('/pacientes')
+    } catch {
+      setError('Error al desactivar')
+    }
     setConfirmarDesactivar(false)
   }
 
   async function eliminarPaciente() {
-    const { error } = await supabase.from('pacientes').delete().eq('id', id)
-    if (!error) navigate('/pacientes')
-    else setError('Error al eliminar permanentemente')
+    try {
+      await api.delete(`/pacientes/${id}`)
+      navigate('/pacientes')
+    } catch {
+      setError('Error al eliminar')
+    }
     setConfirmarEliminar(false)
   }
 
-  const deudaTotal = cobros.reduce((acc, c) => acc + (c.diferencia || 0), 0)
+  const totalCobrado = cobros.reduce((acc, c) => acc + (c.monto || 0), 0)
   const puedeDesactivar = rolUsuario === 'super_admin' || rolUsuario === 'jefe_clinica'
   const puedeEliminar = rolUsuario === 'super_admin'
 
@@ -271,19 +317,11 @@ export default function FichaPaciente() {
           </div>
 
           <div className="lg:col-span-2 space-y-6">
-            {/* Saldo */}
-            <div className={`rounded-xl shadow-sm border p-5 ${
-              deudaTotal > 0 ? 'bg-red-50 border-red-200' :
-              deudaTotal < 0 ? 'bg-green-50 border-green-200' :
-              'bg-white border-gray-200'
-            }`}>
-              <h2 className="font-semibold text-gray-800 mb-1">Saldo actual</h2>
-              <p className={`text-2xl font-bold ${
-                deudaTotal > 0 ? 'text-red-600' : deudaTotal < 0 ? 'text-green-600' : 'text-gray-600'
-              }`}>
-                {deudaTotal > 0 ? `Debe $${deudaTotal.toLocaleString()}`
-                  : deudaTotal < 0 ? `A favor $${Math.abs(deudaTotal).toLocaleString()}`
-                  : 'Sin deuda'}
+            {/* Total cobrado */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+              <h2 className="font-semibold text-gray-800 mb-1">Total cobrado</h2>
+              <p className="text-2xl font-bold text-gray-700">
+                {totalCobrado > 0 ? `$${totalCobrado.toLocaleString()}` : 'Sin cobros registrados'}
               </p>
             </div>
 
@@ -296,12 +334,13 @@ export default function FichaPaciente() {
                 <div className="space-y-3">
                   {tratamientos.map(t => (
                     <div key={t.id} className="border border-gray-200 rounded-lg overflow-hidden">
-                      {/* Cabecera del tratamiento */}
                       <div className="flex justify-between items-center p-3 bg-gray-50">
                         <div>
-                          <p className="font-medium text-gray-800 text-sm">{t.especialidades?.nombre}</p>
+                          <p className="font-medium text-gray-800 text-sm">
+                            {t.practica?.nombre || 'Tratamiento'}
+                          </p>
                           <p className="text-gray-500 text-xs mt-0.5">
-                            {t.tipo_material} · desde {formatFecha(t.fecha_inicio)} · control {t.cuota_base ? `$${Number(t.cuota_base).toLocaleString()}` : '-'}
+                            desde {formatFecha(t.fecha)}{t.monto ? ` · $${Number(t.monto).toLocaleString()}` : ''}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
@@ -318,13 +357,13 @@ export default function FichaPaciente() {
                         </div>
                       </div>
 
-                      {/* Profesional */}
                       <div className="px-3 py-2 text-xs text-gray-600 border-t border-gray-100">
                         <span className="text-gray-400">Profesional: </span>
-                        {t.profesionales?.usuarios?.nombre || t.profesionales?.nombre_corto || '-'}
+                        {t.profesional
+                          ? `${t.profesional.nombre} ${t.profesional.apellido}`
+                          : '-'}
                       </div>
 
-                      {/* Panel de edición */}
                       {editandoTratamiento === t.id && (
                         <div className="border-t border-gray-200 p-3 bg-blue-50 space-y-3">
                           <div className="grid grid-cols-2 gap-3">
@@ -345,7 +384,7 @@ export default function FichaPaciente() {
                                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                                 <option value="">-- Sin asignar --</option>
                                 {profesionales.map(p => (
-                                  <option key={p.id} value={p.id}>{p.usuarios?.nombre}</option>
+                                  <option key={p.id} value={p.id}>{p.nombre} {p.apellido}</option>
                                 ))}
                               </select>
                             </div>
@@ -381,27 +420,22 @@ export default function FichaPaciente() {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="text-left px-4 py-2 text-gray-600 font-medium">Fecha</th>
-                        <th className="text-left px-4 py-2 text-gray-600 font-medium">Práctica</th>
-                        <th className="text-left px-4 py-2 text-gray-600 font-medium">Total</th>
-                        <th className="text-left px-4 py-2 text-gray-600 font-medium">Pagó</th>
+                        <th className="text-left px-4 py-2 text-gray-600 font-medium">Descripción / Práctica</th>
+                        <th className="text-left px-4 py-2 text-gray-600 font-medium">Monto</th>
                         <th className="text-left px-4 py-2 text-gray-600 font-medium">Medio</th>
-                        <th className="text-left px-4 py-2 text-gray-600 font-medium">Dif</th>
                       </tr>
                     </thead>
                     <tbody>
                       {cobros.map(c => (
                         <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50">
                           <td className="px-4 py-2 text-gray-600 whitespace-nowrap">{formatFecha(c.fecha)}</td>
-                          <td className="px-4 py-2 text-gray-700">{c.practicas?.nombre || 'Control'}</td>
-                          <td className="px-4 py-2 text-gray-800 whitespace-nowrap">${c.total?.toLocaleString()}</td>
-                          <td className="px-4 py-2 text-gray-800 whitespace-nowrap">${c.monto_pagado?.toLocaleString()}</td>
-                          <td className="px-4 py-2 text-gray-500 whitespace-nowrap">{c.medio_pago}</td>
-                          <td className={`px-4 py-2 font-medium whitespace-nowrap ${
-                            c.diferencia > 0 ? 'text-green-600' :
-                            c.diferencia < 0 ? 'text-red-600' : 'text-gray-500'
-                          }`}>
-                            {c.diferencia === 0 ? '-' : `$${c.diferencia?.toLocaleString()}`}
+                          <td className="px-4 py-2 text-gray-700">
+                            {c.tratamiento?.practica?.nombre || c.descripcion || 'Cobro'}
                           </td>
+                          <td className="px-4 py-2 text-gray-800 whitespace-nowrap">
+                            ${(c.monto || 0).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-2 text-gray-500 whitespace-nowrap">{c.medio_pago || '-'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -435,7 +469,7 @@ export default function FichaPaciente() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-2">¿Eliminar paciente?</h2>
             <p className="text-gray-500 text-sm mb-6">
-              ¿Estás seguro de que querés eliminar permanentemente a <strong>{paciente.apellido_nombre}</strong>? Esta acción no se puede deshacer.
+              ¿Estás seguro de que querés eliminar a <strong>{paciente.apellido_nombre}</strong>?
             </p>
             <div className="flex gap-2">
               <button onClick={() => setConfirmarEliminar(false)}

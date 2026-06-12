@@ -12,7 +12,7 @@ export default function Layout() {
         onToggle={() => setSidebarCollapsed(prev => !prev)}
       />
       {/* overflow-hidden: la agenda maneja su propio scroll internamente */}
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 overflow-hidden min-w-0">
         <Outlet />
       </main>
     </div>

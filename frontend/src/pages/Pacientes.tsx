@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import api from '../services/api'
 import { Search, Plus, X } from 'lucide-react'
 
 type Paciente = {
@@ -25,6 +26,44 @@ type NuevoPaciente = {
   fecha_ingreso: string
   direccion: string
   ciudad: string
+}
+
+type PacienteAPI = {
+  id: string
+  nombre: string
+  apellido: string
+  dni: string
+  telefono: string
+  email: string
+  como_conocio: string
+  activo: boolean
+}
+
+function mapPaciente(p: PacienteAPI): Paciente {
+  return {
+    ...p,
+    apellido_nombre: p.apellido && p.nombre
+      ? `${p.apellido}, ${p.nombre}`
+      : p.apellido || p.nombre || '',
+  }
+}
+
+function splitApellidoNombre(apellidoNombre: string): { apellido: string; nombre: string } {
+  const idx = apellidoNombre.indexOf(',')
+  if (idx !== -1) {
+    return {
+      apellido: apellidoNombre.slice(0, idx).trim(),
+      nombre: apellidoNombre.slice(idx + 1).trim(),
+    }
+  }
+  const spIdx = apellidoNombre.indexOf(' ')
+  if (spIdx !== -1) {
+    return {
+      apellido: apellidoNombre.slice(0, spIdx).trim(),
+      nombre: apellidoNombre.slice(spIdx + 1).trim(),
+    }
+  }
+  return { apellido: apellidoNombre.trim(), nombre: apellidoNombre.trim() }
 }
 
 export default function Pacientes() {
@@ -53,36 +92,42 @@ export default function Pacientes() {
 
   async function cargarPacientes() {
     setLoading(true)
-    const { data } = await supabase
-      .from('pacientes')
-      .select('*')
-      .eq('activo', true)
-      .order('apellido_nombre')
-    setPacientes(data || [])
+    try {
+      const data = await api.get<PacienteAPI[]>('/pacientes?activo=true')
+      setPacientes(data.map(mapPaciente))
+    } catch {
+      setPacientes([])
+    }
     setLoading(false)
   }
 
   async function cargarDesactivados() {
-    const { data } = await supabase
-      .from('pacientes').select('*').eq('activo', false).order('apellido_nombre')
-    setDesactivados(data || [])
+    try {
+      const data = await api.get<PacienteAPI[]>('/pacientes?activo=false')
+      setDesactivados(data.map(mapPaciente))
+    } catch {
+      setDesactivados([])
+    }
   }
 
   async function restaurarPaciente(pacienteId: string) {
-    await supabase.from('pacientes').update({ activo: true }).eq('id', pacienteId)
-    cargarDesactivados()
-    cargarPacientes()
+    try {
+      await api.put(`/pacientes/${pacienteId}`, { activo: true })
+      cargarDesactivados()
+      cargarPacientes()
+    } catch { /* ignorar */ }
   }
 
   const pacientesFiltrados = pacientes.filter(p =>
     p.apellido_nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-    p.dni.includes(busqueda)
+    (p.dni || '').includes(busqueda)
   )
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-semibold text-gray-800">Pacientes</h1>
+    <div className="h-full overflow-y-auto">
+    <div className="p-6">
+      <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-100">
+        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Pacientes</h1>
         <div className="flex gap-2">
           {rolUsuario === 'super_admin' && (
             <button
@@ -153,6 +198,7 @@ export default function Pacientes() {
 
       {mostrarForm && (
         <FormularioPaciente
+          splitApellidoNombre={splitApellidoNombre}
           onClose={() => setMostrarForm(false)}
           onGuardado={() => { setMostrarForm(false); cargarPacientes() }}
         />
@@ -191,10 +237,19 @@ export default function Pacientes() {
         </div>
       )}
     </div>
+    </div>
   )
 }
 
-function FormularioPaciente({ onClose, onGuardado }: { onClose: () => void, onGuardado: () => void }) {
+function FormularioPaciente({
+  splitApellidoNombre,
+  onClose,
+  onGuardado,
+}: {
+  splitApellidoNombre: (s: string) => { apellido: string; nombre: string }
+  onClose: () => void
+  onGuardado: () => void
+}) {
   const [form, setForm] = useState<NuevoPaciente>({
     apellido_nombre: '', tipo_documento: 'DNI', dni: '',
     prefijo: '', telefono: '', email: '', como_conocio: '',
@@ -233,8 +288,10 @@ function FormularioPaciente({ onClose, onGuardado }: { onClose: () => void, onGu
       return
     }
 
+    const { apellido, nombre } = splitApellidoNombre(form.apellido_nombre)
     const datosGuardar = {
-      apellido_nombre: form.apellido_nombre,
+      apellido,
+      nombre,
       dni: `${form.tipo_documento}: ${form.dni}`,
       telefono: form.prefijo && form.telefono ? `${form.prefijo}-${form.telefono}` : '',
       email: form.email || null,
@@ -245,13 +302,16 @@ function FormularioPaciente({ onClose, onGuardado }: { onClose: () => void, onGu
       ciudad: form.ciudad || null,
     }
 
-    const { error } = await supabase.from('pacientes').insert(datosGuardar)
-    if (error) {
-      setError(error.message.includes('unique')
-        ? `Ya existe un paciente con ${form.tipo_documento} ${form.dni}`
-        : 'Error al guardar')
-    } else {
+    try {
+      await api.post('/pacientes', datosGuardar)
       onGuardado()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al guardar'
+      setError(
+        msg.toLowerCase().includes('dni') || msg.includes('409') || msg.includes('unique')
+          ? `Ya existe un paciente con ${form.tipo_documento} ${form.dni}`
+          : 'Error al guardar'
+      )
     }
     setLoading(false)
   }
@@ -331,7 +391,6 @@ function FormularioPaciente({ onClose, onGuardado }: { onClose: () => void, onGu
             />
           </div>
 
-          {/* NUEVOS: Dirección y Ciudad */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Dirección</label>
             <input

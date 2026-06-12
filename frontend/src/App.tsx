@@ -6,7 +6,6 @@ import { Eye, EyeOff, ShieldAlert } from 'lucide-react'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Pacientes from './pages/Pacientes'
-import Caja from './pages/Caja'
 import Agenda from './pages/Agenda'
 import FichaPaciente from './pages/FichaPaciente'
 import Usuarios from './pages/Usuarios'
@@ -31,7 +30,10 @@ function App() {
       setSession(session)
       setLoading(false)
     })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN') {
+        window.history.replaceState({}, '', '/')
+      }
       setSession(session)
     })
     return () => subscription.unsubscribe()
@@ -64,7 +66,6 @@ function App() {
             <Route index element={<Dashboard />} />
             <Route path="pacientes" element={<Pacientes />} />
             <Route path="pacientes/:id" element={<FichaPaciente />} />
-            <Route path="caja" element={<Caja />} />
             <Route path="agenda" element={<Agenda />} />
             <Route path="practicas" element={
               <RutaProtegida rolesPermitidos={['super_admin', 'jefe_clinica']}>

@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Calendar,
-  UserCog, LogOut, PanelLeftClose, PanelLeftOpen,
+  UserCog, LogOut, ChevronLeft, ChevronRight,
   Stethoscope
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -18,16 +18,23 @@ type SidebarProps = { collapsed: boolean; onToggle: () => void }
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   return (
-    <aside className={`h-screen bg-white border-r border-gray-200 flex flex-col transition-all duration-200 flex-shrink-0 ${collapsed ? 'w-16' : 'w-56'}`}>
-      <div className={`border-b border-gray-200 flex items-center ${collapsed ? 'justify-center py-3 px-2 flex-col gap-1' : 'justify-between p-4'}`}>
+    <aside className={`h-screen bg-white border-r border-gray-200 flex flex-col transition-all duration-200 flex-shrink-0 relative ${collapsed ? 'w-16' : 'w-56'}`}>
+
+      {/* Header: solo logo, sin botón encima */}
+      <div className={`border-b border-gray-200 flex items-center justify-center ${collapsed ? 'py-4 px-2' : 'p-4'}`}>
         <img src="/logo.jpg" alt="L&D"
           className={`object-cover rounded-full transition-all duration-200 ${collapsed ? 'h-8 w-8' : 'h-16 w-16'}`} />
-        <button onClick={onToggle}
-          className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors flex-shrink-0"
-          title={collapsed ? 'Expandir menú' : 'Colapsar menú'}>
-          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-        </button>
       </div>
+
+      {/* Botón colapsar: pastilla en el borde derecho del sidebar, separado del logo */}
+      <button
+        onClick={onToggle}
+        title={collapsed ? 'Expandir menú' : 'Colapsar menú'}
+        aria-label={collapsed ? 'Expandir menú' : 'Colapsar menú'}
+        className="absolute top-6 -right-3 z-10 flex items-center justify-center w-6 h-6 rounded-full bg-white border border-gray-200 shadow-sm text-gray-500 hover:text-gray-700 hover:shadow-md transition-all"
+      >
+        {collapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
+      </button>
 
       <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
         {menu.map(({ path, icon: Icon, label }) => (
@@ -52,6 +59,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           {!collapsed && 'Cerrar sesión'}
         </button>
       </div>
+
     </aside>
   )
 }
