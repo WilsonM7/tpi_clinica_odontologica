@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import api from '../services/api'
 import {
   ChevronLeft, ChevronRight, Search, SlidersHorizontal, X,
-  BanIcon, MessageCircle, UserRound, CreditCard, PanelLeftClose, PanelLeftOpen
+  BanIcon, MessageCircle, UserRound, PanelLeftClose, PanelLeftOpen
 } from 'lucide-react'
 import {
   format, addDays, addWeeks, addMonths, addYears,
@@ -34,9 +34,9 @@ type Turno = {
   practicas?: { nombre: string }
 }
 
-type Profesional = { id: string; usuario_id: string; usuarios: { nombre: string } }
+type Profesional = { id: string; usuario_id: string; usuarios: { nombre: string }; especialidades?: any[] }
 type Sucursal = { id: string; nombre: string }
-type Consultorio = { id: string; nombre: string; orden: number; sucursal_id: string }
+type Consultorio = { id: string; nombre: string; orden?: number; sucursal_id: string }
 type HorarioProfesional = { profesional_id: string; dia_semana: number; hora_inicio: string; hora_fin: string }
 type AusenciaProfesional = { profesional_id: string; fecha_desde: string; fecha_hasta: string }
 type DiaInhabilitado = { id: string; fecha: string; sucursal_id: string | null; motivo: string }
@@ -69,6 +69,7 @@ const ESTADOS = [
   { value: 'ausente', label: 'Ausente', clase: 'bg-red-100 border-red-400 text-red-700' },
   { value: 'reprogramado', label: 'Reprogramado', clase: 'bg-red-50 border-red-300 text-red-500' },
   { value: 'pendiente', label: 'Pendiente', clase: 'bg-blue-100 border-blue-400 text-blue-800' },
+  { value: 'cancelado', label: 'Cancelado', clase: 'bg-gray-100 border-gray-300 text-gray-500' },
 ]
 
 const RADIO_ESTADOS = [
@@ -80,9 +81,6 @@ const RADIO_ESTADOS = [
 ]
 
 function normHora(h: string): string { return h ? h.substring(0, 5) : '' }
-function numConsultorio(nombre: string): string {
-  const m = nombre.match(/\d+/); return m ? m[0] : nombre
-}
 function claseDeEstado(estado: string) {
   return ESTADOS.find(e => e.value === estado)?.clase || 'bg-blue-100 border-blue-400 text-blue-800'
 }
@@ -91,10 +89,7 @@ function radioDot(estado: string | null) {
   return RADIO_ESTADOS.find(r => r.value === estado)?.dot || null
 }
 function toLocalAR(fechaISO: string): Date {
-  return new Date(new Date(fechaISO).getTime())
-}
-function toUTC(fechaLocalAR: Date): string {
-  return new Date(fechaLocalAR.getTime() - 3 * 3600000).toISOString()
+  return new Date(fechaISO)
 }
 function franjaHoraria(hora: string): 'mañana' | 'tarde' {
   return parseInt(hora.split(':')[0]) < 14 ? 'mañana' : 'tarde'
@@ -115,7 +110,6 @@ function ColumnaHoras() {
 }
 
 export default function Agenda() {
-  const navigate = useNavigate()
   const [vista, setVista] = useState<Vista>('semana')
   const [fechaActual, setFechaActual] = useState(new Date())
   const [turnos, setTurnos] = useState<Turno[]>([])
@@ -176,6 +170,7 @@ export default function Agenda() {
     return { desde: startOfYear(fecha), hasta: endOfYear(fecha) }
   }
 
+  // Auth sigue usando Supabase hasta que se migre (Fase 4)
   async function cargarRolActual() {
     const { data } = await supabase.auth.getUser()
     if (data.user) {
@@ -185,86 +180,116 @@ export default function Agenda() {
   }
 
   async function cargarDatos() {
-    const [{ data: sucs }, { data: profs }, { data: esps }] = await Promise.all([
-      supabase.from('sucursales').select('*').eq('activa', true),
-      supabase.from('profesionales').select('*, usuarios(nombre)').eq('activo', true),
-      supabase.from('especialidades').select('*').order('nombre')
-    ])
-    setSucursales(sucs || [])
-    setProfesionales(profs || [])
-    setEspecialidades(esps || [])
-    if (sucs && sucs.length > 0) setSucursalId(sucs[0].id)
+    try {
+      const [sucs, profs, esps] = await Promise.all([
+        api.get<any[]>('/sucursales'),
+        api.get<any[]>('/profesionales'),
+        api.get<any[]>('/especialidades'),
+      ])
+      const sucursalesData: Sucursal[] = sucs || []
+      // Transformar profesionales al formato esperado por el componente
+      const profsTransformados: Profesional[] = (profs || []).map((p: any) => ({
+        ...p,
+        usuarios: {
+          nombre: p.usuario
+            ? `${p.usuario.nombre} ${p.usuario.apellido}`
+            : `${p.nombre} ${p.apellido}`,
+        },
+      }))
+      setSucursales(sucursalesData)
+      setProfesionales(profsTransformados)
+      setEspecialidades(esps || [])
+      if (sucursalesData.length > 0) setSucursalId(sucursalesData[0].id)
+    } catch (err) {
+      console.error('Error cargando datos:', err)
+    }
   }
 
   async function cargarConsultorios() {
-    const { data } = await supabase.from('consultorios').select('*')
-      .eq('sucursal_id', sucursalId).eq('activo', true).order('orden')
-    setConsultorios(data || [])
+    try {
+      const data = await api.get<any[]>(`/consultorios${sucursalId ? `?sucursal_id=${sucursalId}` : ''}`)
+      setConsultorios(data || [])
+    } catch (err) {
+      console.error('Error cargando consultorios:', err)
+    }
   }
 
   async function cargarHorariosProfesionales() {
-    const { data } = await supabase.from('profesional_horarios')
-      .select('profesional_id, dia_semana, hora_inicio, hora_fin')
-      .eq('sucursal_id', sucursalId).eq('activo', true)
-    setHorariosProf(data || [])
+    try {
+      const params = new URLSearchParams()
+      if (sucursalId) params.set('sucursal_id', sucursalId)
+      const data = await api.get<any[]>(`/horarios-profesionales?${params}`)
+      setHorariosProf(data || [])
+    } catch (err) {
+      console.error('Error cargando horarios:', err)
+    }
   }
 
   async function cargarAusencias() {
-    const { desde, hasta } = getRango(vista, fechaActual)
-    const { data } = await supabase.from('profesional_ausencias')
-      .select('profesional_id, fecha_desde, fecha_hasta')
-      .lte('fecha_desde', format(hasta, 'yyyy-MM-dd'))
-      .gte('fecha_hasta', format(desde, 'yyyy-MM-dd'))
-    setAusencias(data || [])
+    try {
+      const { desde, hasta } = getRango(vista, fechaActual)
+      const params = new URLSearchParams({
+        fecha_desde: format(desde, 'yyyy-MM-dd'),
+        fecha_hasta: format(hasta, 'yyyy-MM-dd'),
+      })
+      const data = await api.get<any[]>(`/ausencias-profesionales?${params}`)
+      setAusencias(data || [])
+    } catch (err) {
+      console.error('Error cargando ausencias:', err)
+    }
   }
 
   async function cargarDiasInhabilitados() {
-    const { desde, hasta } = getRango(vista, fechaActual)
-    const { data } = await supabase.from('dias_inhabilitados').select('*')
-      .gte('fecha', format(desde, 'yyyy-MM-dd'))
-      .lte('fecha', format(hasta, 'yyyy-MM-dd'))
-    setDiasInhabilitados(data || [])
+    try {
+      const { desde, hasta } = getRango(vista, fechaActual)
+      const params = new URLSearchParams({
+        desde: format(desde, 'yyyy-MM-dd'),
+        hasta: format(hasta, 'yyyy-MM-dd'),
+      })
+      const data = await api.get<any[]>(`/dias-inhabilitados?${params}`)
+      setDiasInhabilitados(data || [])
+    } catch (err) {
+      console.error('Error cargando días inhabilitados:', err)
+    }
   }
 
   async function cargarTurnos() {
-    const { desde, hasta } = getRango(vista, fechaActual)
-    const desdeUTC = toUTC(desde)
-    const hastaUTC = toUTC(hasta)
+    try {
+      const { desde, hasta } = getRango(vista, fechaActual)
+      const params: Record<string, string> = {
+        fecha_desde: format(desde, 'yyyy-MM-dd'),
+        fecha_hasta: format(hasta, 'yyyy-MM-dd'),
+      }
+      if (sucursalId) params.sucursal_id = sucursalId
+      if (profesionalFiltro) params.profesional_id = profesionalFiltro
+      if (estadoFiltro) params.estado = estadoFiltro
+      if (radioFiltro) params.radiografia = radioFiltro
 
-    let query = supabase.from('turnos')
-      .select('*, pacientes(id, apellido_nombre, telefono), profesionales(id, usuario_id, usuarios(nombre)), consultorios(id, nombre), practicas(nombre)')
-      .eq('sucursal_id', sucursalId)
-      .gte('fecha_hora', desdeUTC)
-      .lte('fecha_hora', hastaUTC)
+      let resultado = await api.get<Turno[]>(`/turnos?${new URLSearchParams(params)}`)
 
-    if (profesionalFiltro) query = query.eq('profesional_id', profesionalFiltro)
-    if (estadoFiltro) query = query.eq('estado', estadoFiltro)
-    if (radioFiltro) query = query.eq('radiografia', radioFiltro)
+      if (especialidadFiltro) {
+        const profIds = profesionales
+          .filter(p => p.especialidades?.some((e: any) => e.especialidad_id === especialidadFiltro))
+          .map(p => p.id)
+        resultado = resultado.filter(t => profIds.includes(t.profesional_id))
+      }
 
-    const { data } = await query
-    let resultado = data || []
-
-    if (especialidadFiltro) {
-      const { data: profEsps } = await supabase
-        .from('profesional_especialidades').select('profesional_id').eq('especialidad_id', especialidadFiltro)
-      const profIds = (profEsps || []).map((pe: any) => pe.profesional_id)
-      resultado = resultado.filter(t => profIds.includes(t.profesional_id))
+      setTurnos(resultado || [])
+    } catch (err) {
+      console.error('Error cargando turnos:', err)
     }
-
-    setTurnos(resultado)
   }
 
   async function buscarTurnos(q: string) {
     if (q.length < 2) { setResultadosBusqueda([]); return }
-    const { data } = await supabase.from('turnos')
-      .select('*, pacientes(id, apellido_nombre, telefono), profesionales(id, usuario_id, usuarios(nombre)), consultorios(id, nombre), practicas(nombre)')
-      .eq('sucursal_id', sucursalId).order('fecha_hora', { ascending: false }).limit(50)
-    const q2 = q.toLowerCase()
-    setResultadosBusqueda((data || []).filter(t =>
-      t.pacientes?.apellido_nombre?.toLowerCase().includes(q2) ||
-      t.practicas?.nombre?.toLowerCase().includes(q2) ||
-      t.profesionales?.usuarios?.nombre?.toLowerCase().includes(q2)
-    ))
+    try {
+      const params: Record<string, string> = { busqueda: q, limit: '50', orden: 'desc' }
+      if (sucursalId) params.sucursal_id = sucursalId
+      const data = await api.get<Turno[]>(`/turnos?${new URLSearchParams(params)}`)
+      setResultadosBusqueda(data || [])
+    } catch {
+      setResultadosBusqueda([])
+    }
   }
 
   function navegar(dir: 1 | -1) {
@@ -289,13 +314,11 @@ export default function Agenda() {
     return turnos.filter(t => isSameDay(toLocalAR(t.fecha_hora), fecha))
   }
 
-  function turnosEnSlot(fecha: Date, hora: string, consultorioId: string) {
+  function turnosEnSlotDia(fecha: Date, hora: string) {
     const [h, m] = hora.split(':').map(Number)
     return turnos.filter(t => {
       const ft = toLocalAR(t.fecha_hora)
-      return isSameDay(ft, fecha)
-        && ft.getHours() === h && ft.getMinutes() === m
-        && t.consultorio_id === consultorioId
+      return isSameDay(ft, fecha) && ft.getHours() === h && ft.getMinutes() === m
     })
   }
 
@@ -329,7 +352,7 @@ export default function Agenda() {
     return profIds.size
   }
 
-  function celdaHabilitada(fecha: Date, hora: string, consultorioIdx: number): boolean {
+  function celdaDiaHabilitada(fecha: Date, hora: string): boolean {
     if (diaInhabilitado(fecha)) return false
     if (profesionalFiltro) {
       const dia = fecha.getDay()
@@ -342,8 +365,7 @@ export default function Agenda() {
       if (!tieneHorario) return false
       return !profesionalAusente(profesionalFiltro, fecha)
     }
-    const activos = profesionalesActivosEnFecha(fecha, hora)
-    return consultorioIdx < activos
+    return profesionalesActivosEnFecha(fecha, hora) > 0
   }
 
   function posicionHoraActual() {
@@ -449,38 +471,33 @@ export default function Agenda() {
     const diaInh = diaInhabilitado(fecha)
     return (
       <>
-        {HORARIOS.map(hora => (
-          <div key={hora} className="flex border-b border-gray-100" style={{ height: SLOT_H }}>
-            {consultorios.map((con, idx) => {
-              const habilitada = celdaHabilitada(fecha, hora, idx)
-              const ts = turnosEnSlot(fecha, hora, con.id)
-              const tieneturno = ts.length > 0
-
-              const bg = diaInh
-                ? 'bg-orange-50 cursor-not-allowed'
-                : !habilitada
-                  ? 'bg-red-50 cursor-not-allowed'
-                  : soloLibres && tieneturno
-                    ? 'bg-red-100 cursor-not-allowed'
-                    : tieneturno
-                      ? ''
-                      : puedeModificar
-                        ? 'cursor-pointer hover:bg-blue-50'
-                        : 'cursor-default'
-
-              return (
-                <div key={con.id}
-                  className={`flex-1 border-r border-gray-100 last:border-r-0 relative ${bg}`}
-                  onClick={() => {
-                    if (!habilitada || !puedeModificar || diaInh || (soloLibres && tieneturno)) return
-                    abrirFormTurno(fecha, hora, con.id)
-                  }}>
-                  {ts.map(t => renderTurno(t, false, soloLibres))}
-                </div>
-              )
-            })}
-          </div>
-        ))}
+        {HORARIOS.map(hora => {
+          const ts = turnosEnSlotDia(fecha, hora)
+          const habilitada = celdaDiaHabilitada(fecha, hora)
+          const tieneturno = ts.length > 0
+          const bg = diaInh
+            ? 'bg-orange-50 cursor-not-allowed'
+            : !habilitada
+              ? 'bg-red-50 cursor-not-allowed'
+              : soloLibres && tieneturno
+                ? 'bg-red-100 cursor-not-allowed'
+                : tieneturno
+                  ? ''
+                  : puedeModificar
+                    ? 'cursor-pointer hover:bg-blue-50'
+                    : 'cursor-default'
+          return (
+            <div key={hora}
+              className={`border-b border-gray-100 relative ${bg}`}
+              style={{ height: SLOT_H }}
+              onClick={() => {
+                if (!habilitada || !puedeModificar || diaInh || (soloLibres && tieneturno)) return
+                abrirFormTurno(fecha, hora, consultorios[0]?.id || '')
+              }}>
+              {ts.map(t => renderTurno(t, false, soloLibres))}
+            </div>
+          )
+        })}
       </>
     )
   }
@@ -497,21 +514,7 @@ export default function Agenda() {
               {headerDia(fechaActual)}
             </div>
           </div>
-          {consultorios.length > 0 && (
-            <div className="flex border-t border-gray-100 bg-white">
-              <div className="w-14 flex-shrink-0 border-r border-gray-200" />
-              {consultorios.map((con, idx) => {
-                const hab = celdaHabilitada(fechaActual, '08:00', idx)
-                return (
-                  <div key={con.id}
-                    className={`flex-1 text-center py-1 text-xs font-semibold border-r border-gray-200 last:border-r-0 ${hab ? 'text-gray-600 bg-white' : 'text-red-400 bg-red-50'}`}>
-                    {numConsultorio(con.nombre)}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
+          </div>
         <div className="flex relative">
           {isToday(fechaActual) && posLinea >= 0 && (
             <div className="absolute left-14 right-0 flex items-center z-10 pointer-events-none"
@@ -546,24 +549,6 @@ export default function Agenda() {
             )
           })}
         </div>
-        {consultorios.length > 0 && (
-          <div className="flex sticky top-[52px] z-20 bg-white border-b border-gray-200">
-            <div className="w-14 flex-shrink-0 border-r border-gray-200" />
-            {diasSemana.map(dia => (
-              <div key={dia.toISOString()} className="flex-1 flex border-r border-gray-200 last:border-r-0" style={{ minWidth: 0 }}>
-                {consultorios.map((con, idx) => {
-                  const hab = celdaHabilitada(dia, '08:00', idx)
-                  return (
-                    <div key={con.id}
-                      className={`flex-1 text-center py-1 text-xs font-semibold border-r border-gray-100 last:border-r-0 ${hab ? 'text-gray-400 bg-white' : 'text-red-300 bg-red-50'}`}>
-                      {numConsultorio(con.nombre)}
-                    </div>
-                  )
-                })}
-              </div>
-            ))}
-          </div>
-        )}
         <div className="flex relative">
           <ColumnaHoras />
           {diasSemana.map(dia => (
@@ -597,6 +582,11 @@ export default function Agenda() {
         <button onClick={() => navegar(1)} className="p-1.5 hover:bg-gray-100 rounded-lg flex-shrink-0"><ChevronRight size={16} /></button>
         <span className="text-sm font-medium text-gray-800 capitalize min-w-44 text-center flex-shrink-0">{tituloNavegacion()}</span>
         <div className="flex-1" />
+        {sucursales.length > 0 && (
+          <span className="text-xs text-gray-500 border border-gray-200 rounded-lg px-2 py-1 flex-shrink-0">
+            {sucursales[0]?.nombre}
+          </span>
+        )}
         {puedeModificar && (
           <button onClick={() => setMostrarBajaDia(true)}
             className="flex items-center gap-1 px-2 py-1 border border-orange-300 text-orange-600 rounded-lg text-xs hover:bg-orange-50 flex-shrink-0">
@@ -611,10 +601,6 @@ export default function Agenda() {
           className={`p-1.5 hover:bg-gray-100 rounded-lg ${mostrarFiltros ? 'bg-blue-50' : ''}`}>
           <SlidersHorizontal size={16} className={mostrarFiltros ? 'text-blue-600' : 'text-gray-600'} />
         </button>
-        <select value={sucursalId} onChange={e => setSucursalId(e.target.value)}
-          className="border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none">
-          {sucursales.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-        </select>
         <select value={vista} onChange={e => setVista(e.target.value as Vista)}
           className="border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none">
           <option value="dia">Día</option>
@@ -789,8 +775,7 @@ export default function Agenda() {
       {turnoSeleccionado && (
         <DetalleTurno turno={turnoSeleccionado} puedeModificar={puedeModificar}
           onClose={() => setTurnoSeleccionado(null)}
-          onActualizado={() => { setTurnoSeleccionado(null); cargarTurnos() }}
-          onIrACaja={t => { setTurnoSeleccionado(null); navigate('/caja', { state: { turno: t } }) }} />
+          onActualizado={() => { setTurnoSeleccionado(null); cargarTurnos() }} />
       )}
       {mostrarBajaDia && (
         <ModalBajaDia sucursales={sucursales}
@@ -835,7 +820,11 @@ function MiniCalendario({ fecha, onSelect }: { fecha: Date; onSelect: (d: Date) 
 function ModalBajaDia({ sucursales, onClose, onGuardado }: {
   sucursales: Sucursal[]; onClose: () => void; onGuardado: () => void
 }) {
-  const [form, setForm] = useState({ fecha: format(new Date(), 'yyyy-MM-dd'), sucursal_id: 'ambas', motivo: '' })
+  const [form, setForm] = useState({
+    fecha: format(new Date(), 'yyyy-MM-dd'),
+    sucursal_id: sucursales[0]?.id || '',
+    motivo: '',
+  })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -843,16 +832,18 @@ function ModalBajaDia({ sucursales, onClose, onGuardado }: {
     e.preventDefault()
     if (!form.motivo.trim()) { setError('Ingresá un motivo'); return }
     setLoading(true)
-    const { data: user } = await supabase.auth.getUser()
-    const creado_por = user.user?.id
-    if (form.sucursal_id === 'ambas') {
-      for (const s of sucursales) {
-        await supabase.from('dias_inhabilitados').insert({ fecha: form.fecha, sucursal_id: s.id, motivo: form.motivo, creado_por })
-      }
-    } else {
-      await supabase.from('dias_inhabilitados').insert({ fecha: form.fecha, sucursal_id: form.sucursal_id, motivo: form.motivo, creado_por })
+    try {
+      await api.post('/dias-inhabilitados', {
+        fecha: form.fecha,
+        sucursal_id: form.sucursal_id || null,
+        motivo: form.motivo,
+      })
+      setLoading(false)
+      onGuardado()
+    } catch (err: any) {
+      setError(err.message || 'Error al guardar')
+      setLoading(false)
     }
-    setLoading(false); onGuardado()
   }
 
   return (
@@ -867,14 +858,6 @@ function ModalBajaDia({ sucursales, onClose, onGuardado }: {
             <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
             <input type="date" value={form.fecha} onChange={e => setForm({ ...form, fecha: e.target.value })}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" required />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Sucursal</label>
-            <select value={form.sucursal_id} onChange={e => setForm({ ...form, sucursal_id: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="ambas">Ambas sucursales</option>
-              {sucursales.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-            </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Motivo</label>
@@ -924,7 +907,7 @@ function FormularioTurno({ fechaHora, sucursalId, consultorioPreseleccionado, ho
     consultorio_id: consultorioPreseleccionado || '',
     practica_id: '', radiografia: '',
     fecha_hora: fechaHora ? format(fechaHora, "yyyy-MM-dd'T'HH:mm") : '',
-    duracion_minutos: 15, notas: '', estado: 'agendado'
+    duracion_minutos: 30, notas: '', estado: 'agendado'
   })
 
   useEffect(() => {
@@ -936,10 +919,18 @@ function FormularioTurno({ fechaHora, sucursalId, consultorioPreseleccionado, ho
     const fechaStr = dt ? format(dt, 'yyyy-MM-dd') : ''
 
     Promise.all([
-      supabase.from('profesionales').select('*, usuarios(nombre)').eq('activo', true),
-      supabase.from('practicas').select('*').eq('activa', true).order('nombre')
-    ]).then(([{ data: profs }, { data: pracs }]) => {
-      let profsFiltrados = profs || []
+      api.get<any[]>('/profesionales?activo=true'),
+      api.get<any[]>('/practicas?activa=true'),
+    ]).then(([profsRaw, pracs]) => {
+      // Transformar profesionales al formato con usuarios.nombre
+      let profsFiltrados = (profsRaw || []).map((p: any) => ({
+        ...p,
+        usuarios: {
+          nombre: p.usuario
+            ? `${p.usuario.nombre} ${p.usuario.apellido}`
+            : `${p.nombre} ${p.apellido}`,
+        },
+      }))
 
       if (dt && diaSemana >= 0 && hora) {
         const profsConHorario = new Set(
@@ -951,7 +942,7 @@ function FormularioTurno({ fechaHora, sucursalId, consultorioPreseleccionado, ho
             )
             .map(hp => hp.profesional_id)
         )
-        profsFiltrados = profsFiltrados.filter(p =>
+        profsFiltrados = profsFiltrados.filter((p: any) =>
           profsConHorario.has(p.id) &&
           !ausencias.some(a =>
             a.profesional_id === p.id &&
@@ -964,16 +955,19 @@ function FormularioTurno({ fechaHora, sucursalId, consultorioPreseleccionado, ho
       setProfesionales(profsFiltrados)
       setTodasLasPracticas(pracs || [])
       setPracticasFiltradas(pracs || [])
-    })
+    }).catch(console.error)
   }, [])
 
   useEffect(() => {
     if (!form.paciente_id) { setTratamientosPaciente([]); setAdvertenciaProf(''); return }
-    supabase.from('tratamientos')
-      .select('profesional_id, tipo_material, profesionales(usuarios(nombre))')
-      .eq('paciente_id', form.paciente_id)
-      .in('estado', ['en tratamiento', 'en finalizacion'])
-      .then(({ data }) => setTratamientosPaciente(data || []))
+    api.get<any[]>(`/tratamientos?paciente_id=${form.paciente_id}`)
+      .then(data => {
+        const activos = (data || []).filter((t: any) =>
+          t.estado !== 'realizado' && t.estado !== 'cancelado'
+        )
+        setTratamientosPaciente(activos)
+      })
+      .catch(() => setTratamientosPaciente([]))
   }, [form.paciente_id])
 
   useEffect(() => {
@@ -982,38 +976,46 @@ function FormularioTurno({ fechaHora, sucursalId, consultorioPreseleccionado, ho
     }
     const tto = tratamientosPaciente[0]
     if (tto && tto.profesional_id !== form.profesional_id) {
-      const nombre = tto.profesionales?.usuarios?.nombre || 'otro profesional'
+      const prof = tto.profesional
+      const nombre = prof ? `${prof.nombre} ${prof.apellido}` : 'otro profesional'
       setAdvertenciaProf(`Este paciente sigue su tratamiento con ${nombre}. ¿Desea agendarlo de todas formas?`)
     } else {
       setAdvertenciaProf('')
     }
   }, [form.practica_id, form.profesional_id, tratamientosPaciente])
 
-  async function handleProfesionalChange(profesionalId: string) {
+  function handleProfesionalChange(profesionalId: string) {
     setForm(f => ({ ...f, profesional_id: profesionalId, practica_id: '' }))
     if (!profesionalId) {
       setPracticasFiltradas(todasLasPracticas)
       return
     }
-    const { data: espIds } = await supabase
-      .from('profesional_especialidades')
-      .select('especialidad_id')
-      .eq('profesional_id', profesionalId)
-    if (!espIds || espIds.length === 0) {
+    // Usar especialidades del profesional ya cargado (incluidas en el response de /profesionales)
+    const prof = profesionales.find((p: any) => p.id === profesionalId)
+    if (!prof || !prof.especialidades || prof.especialidades.length === 0) {
       setPracticasFiltradas(todasLasPracticas)
       return
     }
-    const ids = espIds.map((e: any) => e.especialidad_id)
+    const ids = prof.especialidades.map((e: any) => e.especialidad_id)
     setPracticasFiltradas(
-      todasLasPracticas.filter(p => !p.especialidad_id || ids.includes(p.especialidad_id))
+      todasLasPracticas.filter((p: any) => !p.especialidad_id || ids.includes(p.especialidad_id))
     )
   }
 
   async function buscarPacientes(q: string) {
     if (q.length < 2) { setPacientes([]); return }
-    const { data } = await supabase.from('pacientes').select('id, apellido_nombre, dni')
-      .eq('activo', true).or(`apellido_nombre.ilike.%${q}%,dni.ilike.%${q}%`).limit(10)
-    setPacientes(data || [])
+    try {
+      const data = await api.get<any[]>(
+        `/pacientes?busqueda=${encodeURIComponent(q)}&activo=true&limit=10`
+      )
+      const transformados = (data || []).map((p: any) => ({
+        ...p,
+        apellido_nombre: `${p.apellido}, ${p.nombre}`,
+      }))
+      setPacientes(transformados)
+    } catch {
+      setPacientes([])
+    }
   }
 
   function validarHorarioProfesional(): string | null {
@@ -1045,7 +1047,7 @@ function FormularioTurno({ fechaHora, sucursalId, consultorioPreseleccionado, ho
     if (activos === 0) return 'No hay profesionales activos para ese día y hora'
     const idx = consultorios.findIndex(c => c.id === form.consultorio_id)
     if (idx >= activos) {
-      const nombresHabilitados = consultorios.slice(0, activos).map(c => numConsultorio(c.nombre)).join(', ')
+      const nombresHabilitados = consultorios.slice(0, activos).map(c => c.nombre).join(', ')
       return `Solo hay ${activos} consultorio${activos > 1 ? 's' : ''} habilitado${activos > 1 ? 's' : ''} para ese horario. Agendá en: ${nombresHabilitados}`
     }
     return null
@@ -1057,55 +1059,41 @@ function FormularioTurno({ fechaHora, sucursalId, consultorioPreseleccionado, ho
     const fechaStr = format(dt, 'yyyy-MM-dd')
     const hora = `${dt.getHours().toString().padStart(2, '0')}:${dt.getMinutes().toString().padStart(2, '0')}`
     const franja = franjaHoraria(hora)
-    const desdeUTC = toUTC(new Date(`${fechaStr}T00:00:00`))
-    const hastaUTC = toUTC(new Date(`${fechaStr}T23:59:59`))
-    const { data: turnosConsultorio } = await supabase
-      .from('turnos')
-      .select('profesional_id, fecha_hora')
-      .eq('consultorio_id', form.consultorio_id)
-      .gte('fecha_hora', desdeUTC)
-      .lte('fecha_hora', hastaUTC)
-      .neq('estado', 'cancelado')
-      .neq('estado', 'reprogramado')
 
+    const turnosConsultorio = await api.get<any[]>(
+      `/turnos?consultorio_id=${form.consultorio_id}&fecha=${fechaStr}`
+    )
     if (!turnosConsultorio || turnosConsultorio.length === 0) return null
 
-    const turnosEnFranja = turnosConsultorio.filter(t => {
+    const turnosEnFranja = turnosConsultorio.filter((t: any) => {
       const horaLocal = toLocalAR(t.fecha_hora)
       const horaStr = `${horaLocal.getHours().toString().padStart(2, '0')}:${horaLocal.getMinutes().toString().padStart(2, '0')}`
-      return franjaHoraria(horaStr) === franja
+      return franjaHoraria(horaStr) === franja &&
+        t.estado !== 'cancelado' && t.estado !== 'reprogramado'
     })
-
     if (turnosEnFranja.length === 0) return null
 
     const profExistente = turnosEnFranja[0].profesional_id
     if (profExistente !== form.profesional_id) {
+      const todosLosTurnos = await api.get<any[]>(`/turnos?fecha=${fechaStr}`)
       const consultoriosOcupados = new Set<string>()
-      const { data: todosLosTurnos } = await supabase
-        .from('turnos')
-        .select('consultorio_id, fecha_hora')
-        .gte('fecha_hora', desdeUTC)
-        .lte('fecha_hora', hastaUTC)
-        .neq('estado', 'cancelado')
-        .neq('estado', 'reprogramado')
-
-        ; (todosLosTurnos || []).forEach(t => {
-          const horaLocal = toLocalAR(t.fecha_hora)
-          const horaStr = `${horaLocal.getHours().toString().padStart(2, '0')}:${horaLocal.getMinutes().toString().padStart(2, '0')}`
-          if (franjaHoraria(horaStr) === franja) consultoriosOcupados.add(t.consultorio_id)
-        })
-
+      ;(todosLosTurnos || []).forEach((t: any) => {
+        const horaLocal = toLocalAR(t.fecha_hora)
+        const horaStr = `${horaLocal.getHours().toString().padStart(2, '0')}:${horaLocal.getMinutes().toString().padStart(2, '0')}`
+        if (franjaHoraria(horaStr) === franja &&
+            t.estado !== 'cancelado' && t.estado !== 'reprogramado') {
+          consultoriosOcupados.add(t.consultorio_id)
+        }
+      })
       const activos = profesionalesActivosEnFecha(dt, hora)
       const consultoriosLibres = consultorios
         .filter((c, idx) => idx < activos && !consultoriosOcupados.has(c.id))
         .map(c => c.nombre)
-
       if (consultoriosLibres.length > 0) {
         return `Ese consultorio ya está asignado a otro profesional. Consultorio${consultoriosLibres.length > 1 ? 's' : ''} libre${consultoriosLibres.length > 1 ? 's' : ''}: ${consultoriosLibres.join(', ')}`
       }
       return 'Ese consultorio ya está asignado a otro profesional en esta franja horaria'
     }
-
     return null
   }
 
@@ -1115,26 +1103,21 @@ function FormularioTurno({ fechaHora, sucursalId, consultorioPreseleccionado, ho
     const fechaStr = format(dt, 'yyyy-MM-dd')
     const hora = `${dt.getHours().toString().padStart(2, '0')}:${dt.getMinutes().toString().padStart(2, '0')}`
     const franja = franjaHoraria(hora)
-    const desdeUTC = toUTC(new Date(`${fechaStr}T00:00:00`))
-    const hastaUTC = toUTC(new Date(`${fechaStr}T23:59:59`))
-    const { data: turnosDia } = await supabase
-      .from('turnos')
-      .select('consultorio_id, fecha_hora, consultorios(nombre)')
-      .eq('profesional_id', form.profesional_id)
-      .gte('fecha_hora', desdeUTC)
-      .lte('fecha_hora', hastaUTC)
-      .neq('estado', 'cancelado')
-      .neq('estado', 'reprogramado')
+
+    const turnosDia = await api.get<any[]>(
+      `/turnos?profesional_id=${form.profesional_id}&fecha=${fechaStr}`
+    )
     if (!turnosDia || turnosDia.length === 0) return null
-    const turnosEnFranja = turnosDia.filter(t => {
+    const turnosEnFranja = turnosDia.filter((t: any) => {
       const horaLocal = toLocalAR(t.fecha_hora)
       const horaStr = `${horaLocal.getHours().toString().padStart(2, '0')}:${horaLocal.getMinutes().toString().padStart(2, '0')}`
-      return franjaHoraria(horaStr) === franja
+      return franjaHoraria(horaStr) === franja &&
+        t.estado !== 'cancelado' && t.estado !== 'reprogramado'
     })
     if (turnosEnFranja.length === 0) return null
     const consultorioExistente = turnosEnFranja[0].consultorio_id
     if (consultorioExistente !== form.consultorio_id) {
-      const nombreCon = (turnosEnFranja[0] as any).consultorios?.nombre || consultorioExistente
+      const nombreCon = turnosEnFranja[0].consultorios?.nombre || consultorioExistente
       return `El profesional atiende en ${nombreCon} en esta franja horaria`
     }
     return null
@@ -1153,30 +1136,45 @@ function FormularioTurno({ fechaHora, sucursalId, consultorioPreseleccionado, ho
     const errorConsultorioHab = validarConsultorioHabilitado()
     if (errorConsultorioHab) { setError(errorConsultorioHab); setLoading(false); return }
 
-    const errorConsultorioOcupado = await validarConsultorioLibreParaProfesional()
-    if (errorConsultorioOcupado) { setError(errorConsultorioOcupado); setLoading(false); return }
+    try {
+      const errorConsultorioOcupado = await validarConsultorioLibreParaProfesional()
+      if (errorConsultorioOcupado) { setError(errorConsultorioOcupado); setLoading(false); return }
 
-    const errorConsultorio = await validarConsultorioProfesional()
-    if (errorConsultorio) { setError(errorConsultorio); setLoading(false); return }
+      const errorConsultorio = await validarConsultorioProfesional()
+      if (errorConsultorio) { setError(errorConsultorio); setLoading(false); return }
 
-    const fechaLocalAR = new Date(form.fecha_hora)
-    const fechaUTC = toUTC(fechaLocalAR)
+      // Verificar slot exacto disponible
+      const [fechaStr, timeStr] = form.fecha_hora.split('T')
+      const horaStr = timeStr.substring(0, 5)
+      const existentes = await api.get<any[]>(
+        `/turnos?consultorio_id=${form.consultorio_id}&fecha=${fechaStr}&hora_inicio=${horaStr}`
+      )
+      const hayConflicto = (existentes || []).some((t: any) =>
+        t.estado !== 'cancelado' && t.estado !== 'reprogramado'
+      )
+      if (hayConflicto) {
+        setError('Ya existe un turno en ese consultorio a esa hora')
+        setLoading(false)
+        return
+      }
 
-    const { data: existente } = await supabase.from('turnos').select('id')
-      .eq('consultorio_id', form.consultorio_id).eq('fecha_hora', fechaUTC).maybeSingle()
-    if (existente) { setError('Ya existe un turno en ese consultorio a esa hora'); setLoading(false); return }
-
-    const { error: err } = await supabase.from('turnos').insert({
-      paciente_id: form.paciente_id, profesional_id: form.profesional_id,
-      consultorio_id: form.consultorio_id, practica_id: (form.practica_id && form.practica_id !== CONTROL_AGENDA_ID) ? form.practica_id : null,
-      radiografia: form.radiografia || null, sucursal_id: sucursalId,
-      fecha_hora: fechaUTC, duracion_minutos: form.duracion_minutos,
-      notas: form.practica_id === CONTROL_AGENDA_ID && !form.notas ? 'Control de tratamiento' : form.notas,
-      estado: form.estado,
-    })
-    if (err) {
-      setError(err.code === '23505' ? 'Ya existe un turno en ese consultorio a esa hora' : `Error: ${err.message}`)
-    } else { onGuardado() }
+      await api.post('/turnos', {
+        paciente_id: form.paciente_id,
+        profesional_id: form.profesional_id,
+        consultorio_id: form.consultorio_id,
+        sucursal_id: sucursalId,
+        practica_id: (form.practica_id && form.practica_id !== CONTROL_AGENDA_ID) ? form.practica_id : null,
+        radiografia: form.radiografia || null,
+        fecha_hora: form.fecha_hora,
+        duracion_minutos: form.duracion_minutos,
+        notas: form.practica_id === CONTROL_AGENDA_ID && !form.notas ? 'Control de tratamiento' : form.notas || null,
+        estado: form.estado,
+      })
+      onGuardado()
+    } catch (err: any) {
+      const msg = err.message || 'Error al guardar el turno'
+      setError(msg.includes('409') || msg.includes('ya existe') ? 'Ya existe un turno en ese consultorio a esa hora' : msg)
+    }
     setLoading(false)
   }
 
@@ -1196,7 +1194,7 @@ function FormularioTurno({ fechaHora, sucursalId, consultorioPreseleccionado, ho
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             {pacientes.length > 0 && (
               <div className="border border-gray-200 rounded-lg mt-1 max-h-40 overflow-y-auto">
-                {pacientes.map(p => (
+                {pacientes.map((p: any) => (
                   <div key={p.id}
                     onClick={() => { setForm(f => ({ ...f, paciente_id: p.id })); setBusquedaPaciente(p.apellido_nombre); setPacientes([]) }}
                     className="px-3 py-2 text-sm hover:bg-blue-50 cursor-pointer">
@@ -1213,7 +1211,7 @@ function FormularioTurno({ fechaHora, sucursalId, consultorioPreseleccionado, ho
               onChange={e => handleProfesionalChange(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="">-- Seleccioná --</option>
-              {profesionales.map(p => <option key={p.id} value={p.id}>{p.usuarios?.nombre}</option>)}
+              {profesionales.map((p: any) => <option key={p.id} value={p.id}>{p.usuarios?.nombre}</option>)}
             </select>
             {advertenciaProf && (
               <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3 text-sm text-yellow-800 flex items-start gap-2">
@@ -1245,7 +1243,7 @@ function FormularioTurno({ fechaHora, sucursalId, consultorioPreseleccionado, ho
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="">-- Sin práctica --</option>
               <option value={CONTROL_AGENDA_ID}>⭐ Control de tratamiento</option>
-              {practicasFiltradas.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              {practicasFiltradas.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
             </select>
           </div>
           <div>
@@ -1301,9 +1299,9 @@ function FormularioTurno({ fechaHora, sucursalId, consultorioPreseleccionado, ho
 }
 
 // ── Detalle turno ─────────────────────────────────────────────────────────────
-function DetalleTurno({ turno, puedeModificar, onClose, onActualizado, onIrACaja }: {
+function DetalleTurno({ turno, puedeModificar, onClose, onActualizado }: {
   turno: Turno; puedeModificar: boolean; onClose: () => void
-  onActualizado: () => void; onIrACaja: (t: Turno) => void
+  onActualizado: () => void
 }) {
   const [practicas, setPracticas] = useState<any[]>([])
   const [notas, setNotas] = useState(turno.notas || '')
@@ -1314,8 +1312,9 @@ function DetalleTurno({ turno, puedeModificar, onClose, onActualizado, onIrACaja
   const [confirmarEliminar, setConfirmarEliminar] = useState(false)
 
   useEffect(() => {
-    supabase.from('practicas').select('*').eq('activa', true).order('nombre')
-      .then(({ data }) => setPracticas(data || []))
+    api.get<any[]>('/practicas?activa=true')
+      .then(data => setPracticas(data || []))
+      .catch(() => setPracticas([]))
   }, [])
 
   const tel = turno.pacientes?.telefono
@@ -1324,14 +1323,26 @@ function DetalleTurno({ turno, puedeModificar, onClose, onActualizado, onIrACaja
 
   async function guardar() {
     setGuardando(true)
-    await supabase.from('turnos').update({
-      notas, estado, practica_id: practicaId || null, radiografia: radiografia || null
-    }).eq('id', turno.id)
-    setGuardando(false); onActualizado()
+    try {
+      await api.put(`/turnos/${turno.id}`, {
+        notas, estado,
+        practica_id: practicaId || null,
+        radiografia: radiografia || null,
+      })
+      onActualizado()
+    } catch (err) {
+      console.error('Error guardando turno:', err)
+    }
+    setGuardando(false)
   }
 
   async function eliminar() {
-    await supabase.from('turnos').delete().eq('id', turno.id); onActualizado()
+    try {
+      await api.delete(`/turnos/${turno.id}`)
+      onActualizado()
+    } catch (err) {
+      console.error('Error eliminando turno:', err)
+    }
   }
 
   return (
@@ -1374,7 +1385,7 @@ function DetalleTurno({ turno, puedeModificar, onClose, onActualizado, onIrACaja
                 <select value={practicaId} onChange={e => setPracticaId(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="">-- Sin práctica --</option>
-                  {practicas.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                  {practicas.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                 </select>
               </div>
               <div>
@@ -1428,10 +1439,6 @@ function DetalleTurno({ turno, puedeModificar, onClose, onActualizado, onIrACaja
                 {guardando ? 'Guardando...' : 'Guardar cambios'}
               </button>
             </div>
-            <button onClick={() => onIrACaja(turno)}
-              className="w-full mt-2 flex items-center justify-center gap-2 border border-green-300 text-green-700 rounded-lg py-2 text-sm hover:bg-green-50">
-              <CreditCard size={14} /> Ir a Caja
-            </button>
             {confirmarEliminar && (
               <div className="mt-3 p-3 bg-red-50 rounded-lg border border-red-200">
                 <p className="text-sm text-red-700 mb-2">¿Seguro que querés eliminar este turno?</p>

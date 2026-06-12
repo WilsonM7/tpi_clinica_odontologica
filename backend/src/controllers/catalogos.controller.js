@@ -1,4 +1,5 @@
 const { Sucursal, Consultorio, Configuracion, DiaInhabilitado } = require('../models/index')
+const { Op } = require('sequelize')
 
 async function listarSucursales(req, res, next) {
   try {
@@ -31,7 +32,6 @@ async function listarConsultorios(req, res, next) {
 async function obtenerConfiguracion(req, res, next) {
   try {
     const items = await Configuracion.findAll({ order: [['clave', 'ASC']] })
-    // Devuelve como objeto clave->valor para fácil consumo en el frontend
     const config = {}
     items.forEach(item => { config[item.clave] = item.valor })
     res.json(config)
@@ -44,12 +44,16 @@ async function listarDiasInhabilitados(req, res, next) {
   try {
     const where = {}
     if (req.query.sucursal_id) {
-      const { Op } = require('sequelize')
-      where.sucursal_id = { [Op.or]: [req.query.sucursal_id, null] }
+      where[Op.or] = [
+        { sucursal_id: req.query.sucursal_id },
+        { sucursal_id: null },
+      ]
     }
-    if (req.query.desde) {
-      const { Op } = require('sequelize')
-      where.fecha = { [Op.gte]: req.query.desde }
+    if (req.query.desde || req.query.hasta) {
+      const fechaWhere = {}
+      if (req.query.desde) fechaWhere[Op.gte] = req.query.desde
+      if (req.query.hasta) fechaWhere[Op.lte] = req.query.hasta
+      where.fecha = fechaWhere
     }
     const dias = await DiaInhabilitado.findAll({
       where,
@@ -61,4 +65,26 @@ async function listarDiasInhabilitados(req, res, next) {
   }
 }
 
-module.exports = { listarSucursales, listarConsultorios, obtenerConfiguracion, listarDiasInhabilitados }
+async function crearDiaInhabilitado(req, res, next) {
+  try {
+    const { fecha, sucursal_id, motivo, tipo } = req.body
+    if (!fecha) return res.status(400).json({ message: 'fecha es obligatoria' })
+    const dia = await DiaInhabilitado.create({
+      fecha,
+      sucursal_id: sucursal_id || null,
+      motivo: motivo || null,
+      tipo: tipo || 'otro',
+    })
+    res.status(201).json(dia)
+  } catch (err) {
+    next(err)
+  }
+}
+
+module.exports = {
+  listarSucursales,
+  listarConsultorios,
+  obtenerConfiguracion,
+  listarDiasInhabilitados,
+  crearDiaInhabilitado,
+}

@@ -7,9 +7,19 @@ async function listar(req, res, next) {
     if (req.query.activo !== undefined) {
       where.activo = req.query.activo === 'true'
     }
+    if (req.query.busqueda) {
+      const q = `%${req.query.busqueda}%`
+      where[Op.or] = [
+        { nombre: { [Op.like]: q } },
+        { apellido: { [Op.like]: q } },
+        { dni: { [Op.like]: q } },
+      ]
+    }
+    const limit = req.query.limit ? parseInt(req.query.limit) : undefined
     const pacientes = await Paciente.findAll({
       where,
       order: [['apellido', 'ASC'], ['nombre', 'ASC']],
+      limit,
     })
     res.json(pacientes)
   } catch (err) {

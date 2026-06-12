@@ -23,6 +23,10 @@ const Turno = sequelize.define('turno', {
     type: DataTypes.UUID,
     allowNull: true,
   },
+  practica_id: {
+    type: DataTypes.UUID,
+    allowNull: true,
+  },
   fecha: {
     type: DataTypes.DATEONLY,
     allowNull: false,
@@ -30,17 +34,28 @@ const Turno = sequelize.define('turno', {
   hora_inicio: {
     type: DataTypes.STRING(5),
     allowNull: false,
-    // formato HH:MM
   },
   hora_fin: {
     type: DataTypes.STRING(5),
     allowNull: true,
   },
+  duracion_minutos: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    defaultValue: 30,
+  },
   estado: {
     type: DataTypes.STRING,
     allowNull: false,
-    defaultValue: 'pendiente',
-    // valores: pendiente, confirmado, cancelado, realizado
+    defaultValue: 'agendado',
+  },
+  notas: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  radiografia: {
+    type: DataTypes.STRING,
+    allowNull: true,
   },
   observaciones: {
     type: DataTypes.TEXT,

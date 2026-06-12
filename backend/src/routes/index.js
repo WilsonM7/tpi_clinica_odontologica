@@ -10,6 +10,7 @@ const cobrosRoutes = require('./cobros.routes')
 const turnosRoutes = require('./turnos.routes')
 const ordenLlegadaRoutes = require('./orden-llegada.routes')
 const catalogosRoutes = require('./catalogos.routes')
+const horariosRoutes = require('./horarios.routes')
 
 const router = Router()
 
@@ -26,5 +27,8 @@ router.use('/orden-llegada', ordenLlegadaRoutes)
 
 // Catálogos: sucursales, consultorios, configuracion, dias-inhabilitados
 router.use('/', catalogosRoutes)
+
+// Horarios y ausencias de profesionales
+router.use('/', horariosRoutes)
 
 module.exports = router

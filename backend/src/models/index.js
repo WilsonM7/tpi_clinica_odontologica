@@ -91,6 +91,10 @@ Turno.belongsTo(Consultorio, { foreignKey: 'consultorio_id', as: 'consultorio' }
 Sucursal.hasMany(Turno, { foreignKey: 'sucursal_id', as: 'turnos' })
 Turno.belongsTo(Sucursal, { foreignKey: 'sucursal_id', as: 'sucursal' })
 
+// Practica <-> Turno
+Practica.hasMany(Turno, { foreignKey: 'practica_id', as: 'turnos_agenda' })
+Turno.belongsTo(Practica, { foreignKey: 'practica_id', as: 'practica' })
+
 // Paciente <-> OrdenLlegada
 Paciente.hasMany(OrdenLlegada, { foreignKey: 'paciente_id', as: 'ordenes_llegada' })
 OrdenLlegada.belongsTo(Paciente, { foreignKey: 'paciente_id', as: 'paciente' })
