@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
 import api from '../services/api'
+import { getUser } from '../lib/auth'
 import {
   ChevronLeft, ChevronRight, Search, SlidersHorizontal, X,
   BanIcon, MessageCircle, UserRound, PanelRightClose, PanelRightOpen
@@ -170,13 +170,9 @@ export default function Agenda() {
     return { desde: startOfYear(fecha), hasta: endOfYear(fecha) }
   }
 
-  // Auth sigue usando Supabase hasta que se migre (Fase 4)
-  async function cargarRolActual() {
-    const { data } = await supabase.auth.getUser()
-    if (data.user) {
-      const { data: u } = await supabase.from('usuarios').select('rol').eq('id', data.user.id).single()
-      setRolActual(u?.rol || '')
-    }
+  function cargarRolActual() {
+    const u = getUser()
+    setRolActual(u?.rol || '')
   }
 
   async function cargarDatos() {

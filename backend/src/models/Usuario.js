@@ -31,6 +31,14 @@ const Usuario = sequelize.define('usuario', {
     defaultValue: true,
     allowNull: false,
   },
+  sucursal_id: {
+    type: DataTypes.UUID,
+    allowNull: true,
+  },
+  password: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
 }, {
   tableName: 'usuarios',
   timestamps: true,

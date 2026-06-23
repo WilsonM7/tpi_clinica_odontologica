@@ -33,6 +33,16 @@ const ProfesionalHorario = sequelize.define('profesional_horario', {
     type: DataTypes.UUID,
     allowNull: true,
   },
+  turno: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    // valores: mañana, tarde, completo
+  },
+  activo: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: true,
+    allowNull: false,
+  },
 }, {
   tableName: 'profesionales_horarios',
   timestamps: false,

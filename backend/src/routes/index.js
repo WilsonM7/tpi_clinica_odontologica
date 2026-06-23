@@ -1,4 +1,5 @@
 const { Router } = require('express')
+const authRoutes = require('./auth.routes')
 const healthRoutes = require('./health.routes')
 const practicasRoutes = require('./practicas.routes')
 const especialidadesRoutes = require('./especialidades.routes')
@@ -14,6 +15,7 @@ const horariosRoutes = require('./horarios.routes')
 
 const router = Router()
 
+router.use('/auth', authRoutes)
 router.use('/health', healthRoutes)
 router.use('/practicas', practicasRoutes)
 router.use('/especialidades', especialidadesRoutes)

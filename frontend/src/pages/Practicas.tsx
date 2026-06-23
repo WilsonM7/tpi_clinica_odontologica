@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
 import api from '../services/api'
+import { getUser } from '../lib/auth'
 import { Search, Plus, X, Pencil } from 'lucide-react'
 
 type Practica = {
@@ -38,12 +38,9 @@ export default function Practicas() {
     cargarRol()
   }, [])
 
-  async function cargarRol() {
-    const { data } = await supabase.auth.getUser()
-    if (data.user) {
-      const { data: u } = await supabase.from('usuarios').select('rol').eq('id', data.user.id).single()
-      setRolUsuario(u?.rol || '')
-    }
+  function cargarRol() {
+    const u = getUser()
+    setRolUsuario(u?.rol || '')
   }
 
   async function cargarDatos() {

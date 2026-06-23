@@ -40,6 +40,18 @@ const Profesional = sequelize.define('profesional', {
     defaultValue: true,
     allowNull: false,
   },
+  nombre_corto: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  porcentaje_instalacion: {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+  },
+  porcentaje_practicas: {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+  },
 }, {
   tableName: 'profesionales',
   timestamps: true,

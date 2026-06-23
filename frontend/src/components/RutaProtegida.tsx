@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { getUser } from '../lib/auth'
 import { ShieldAlert } from 'lucide-react'
 
 type Props = {
@@ -8,39 +7,16 @@ type Props = {
   children: React.ReactNode
 }
 
-/**
- * Guarda de ruta basada en roles (RBAC).
- * Si el usuario no tiene el rol requerido muestra acceso denegado.
- */
 export default function RutaProtegida({ rolesPermitidos, children }: Props) {
-  const [rol, setRol]       = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
+  const user = getUser()
 
-  useEffect(() => {
-    async function verificar() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { navigate('/'); return }
+  if (!user) {
+    navigate('/')
+    return null
+  }
 
-      const { data } = await supabase
-        .from('usuarios')
-        .select('rol')
-        .eq('id', user.id)
-        .single()
-
-      setRol(data?.rol || '')
-      setLoading(false)
-    }
-    verificar()
-  }, [navigate])
-
-  if (loading) return (
-    <div className="flex items-center justify-center h-64 text-gray-400 text-sm">
-      Verificando permisos...
-    </div>
-  )
-
-  if (!rolesPermitidos.includes(rol || '')) return (
+  if (!rolesPermitidos.includes(user.rol)) return (
     <div className="flex flex-col items-center justify-center h-full gap-4 py-24">
       <div className="bg-red-50 border border-red-200 rounded-full p-5">
         <ShieldAlert size={40} className="text-red-400" />

@@ -1,4 +1,4 @@
-# Backend — Clínica Odontológica L&D
+# Backend — Clínica Odontológica
 
 Backend REST API construido con Node.js + Express + Sequelize + SQLite.
 
@@ -65,21 +65,21 @@ Respuesta esperada:
 backend/
 ├── src/
 │   ├── config/
-│   │   └── database.js        → Conexión Sequelize + SQLite
+│   │   └── database.js          → Conexión Sequelize + SQLite
 │   ├── models/
-│   │   └── index.js           → Registro central de modelos (se irán agregando)
+│   │   └── index.js             → Modelos y asociaciones
 │   ├── routes/
-│   │   ├── index.js           → Router raíz de /api
-│   │   └── health.routes.js   → GET /api/health
-│   ├── controllers/
-│   │   └── health.controller.js
-│   ├── services/              → Lógica de negocio (próximas fases)
-│   ├── middleware/            → Auth JWT, control de roles (próximas fases)
-│   └── app.js                 → Express: CORS, middlewares, rutas
-├── server.js                  → Entry point: carga .env, conecta DB, levanta app
-├── database.sqlite            → Archivo de BD (generado automáticamente, en .gitignore)
-├── .env                       → Variables locales (no commitear)
-├── .env.example               → Plantilla de variables
+│   │   ├── index.js             → Router raíz de /api
+│   │   ├── auth.routes.js       → POST /api/auth/login, GET /api/auth/me
+│   │   └── ...                  → Resto de rutas
+│   ├── controllers/             → Lógica de cada endpoint
+│   ├── middleware/
+│   │   └── auth.middleware.js   → Verificación de JWT
+│   └── app.js                   → Express: CORS, middlewares, rutas
+├── server.js                    → Entry point
+├── database.sqlite              → Archivo de BD (en .gitignore)
+├── .env                         → Variables locales (no commitear)
+├── .env.example                 → Plantilla de variables
 └── package.json
 ```
 
@@ -92,6 +92,7 @@ backend/
 ```bash
 cd backend
 npm install
+npm run seed   # Solo la primera vez o al modificar modelos
 npm run dev
 ```
 
@@ -104,27 +105,3 @@ npm run dev
 ```
 
 El frontend queda en `http://localhost:5173` y el backend en `http://localhost:3001`.
-
----
-
-## Estado de la migración desde Supabase
-
-### ✅ Fase 1 — Completada
-
-- Estructura de carpetas del backend creada
-- Servidor Express con CORS configurado para Vite
-- Sequelize conectado a SQLite
-- Endpoint `GET /api/health` funcionando
-- Capa `frontend/src/services/api.ts` lista para consumir el backend
-
-### 🔜 Próximas fases
-
-| Fase | Módulo | Descripción |
-|------|--------|-------------|
-| 2 | Autenticación | Reemplazar `supabase.auth.*` por JWT propio (`POST /api/auth/login`) |
-| 3 | Pacientes | Migrar CRUD de pacientes (`GET/POST/PUT/DELETE /api/pacientes`) |
-| 4 | Prácticas y catálogo | Especialidades, consultorios, sucursales, configuración |
-| 5 | Turnos / Agenda | Migrar calendario y validaciones de disponibilidad |
-| 6 | Cobros / Caja | Endpoint transaccional que reemplaza los inserts múltiples de Caja.tsx |
-| 7 | Usuarios y Profesionales | Reemplazar edge functions `crear-usuario` y `eliminar-usuario` |
-| 8 | Orden de llegada | Migrar consultas de OrdenLlegada.tsx |
