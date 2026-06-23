@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { getUser } from '../lib/auth'
+import api from '../services/api'
 import { ArrowLeft, Save, X, Plus, Trash2, Pencil } from 'lucide-react'
 
 type Usuario = {
@@ -10,7 +11,7 @@ type Usuario = {
   rol: string
   sucursal_id: string
   activo: boolean
-  sucursales: { nombre: string }
+  sucursales: { nombre: string } | null
 }
 
 type Especialidad = { id: string; nombre: string }
@@ -55,79 +56,65 @@ export default function FichaUsuario() {
   const [mostrarFormHorario, setMostrarFormHorario] = useState(false)
   const [form, setForm] = useState({ nombre: '', rol: '', sucursal_id: '' })
 
-  // Porcentajes
   const [porcentajeInstalacion, setPorcentajeInstalacion] = useState('')
   const [porcentajePracticas, setPorcentajePracticas] = useState('')
   const [porcentajesEsp, setPorcentajesEsp] = useState<PorcentajeEsp[]>([])
-  // Versiones guardadas para restaurar al cancelar
   const [pctInstalacionGuardado, setPctInstalacionGuardado] = useState('')
   const [pctPracticasGuardado, setPctPracticasGuardado] = useState('')
   const [pctEspGuardado, setPctEspGuardado] = useState<PorcentajeEsp[]>([])
 
   useEffect(() => {
+    const u = getUser()
+    setRolActual(u?.rol || '')
     cargarDatos()
-    cargarRolActual()
   }, [id])
-
-  async function cargarRolActual() {
-    const { data } = await supabase.auth.getUser()
-    if (data.user) {
-      const { data: u } = await supabase.from('usuarios').select('rol').eq('id', data.user.id).single()
-      setRolActual(u?.rol || '')
-    }
-  }
 
   async function cargarDatos() {
     setLoading(true)
-    const { data: u } = await supabase.from('usuarios').select('*, sucursales(nombre)').eq('id', id).single()
-    setUsuario(u)
-    setForm({ nombre: u?.nombre || '', rol: u?.rol || '', sucursal_id: u?.sucursal_id || '' })
+    try {
+      const [u, sucs, esps] = await Promise.all([
+        api.get<Usuario>(`/usuarios/${id}`),
+        api.get<Sucursal[]>('/sucursales'),
+        api.get<Especialidad[]>('/especialidades'),
+      ])
+      setUsuario(u)
+      setForm({ nombre: u?.nombre || '', rol: u?.rol || '', sucursal_id: u?.sucursal_id || '' })
+      setSucursales(sucs || [])
+      setEspecialidades(esps || [])
 
-    const [{ data: sucs }, { data: esps }] = await Promise.all([
-      supabase.from('sucursales').select('*').eq('activa', true),
-      supabase.from('especialidades').select('*').order('nombre')
-    ])
-    setSucursales(sucs || [])
-    setEspecialidades(esps || [])
-
-    if (u?.rol === 'profesional') {
-      await cargarProfesional(u.id)
+      if (u?.rol === 'profesional') {
+        await cargarProfesional(u.id)
+      }
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   async function cargarProfesional(usuarioId: string) {
-    const { data: prof, error: errProf } = await supabase
-      .from('profesionales')
-      .select('id, nombre_corto, porcentaje_instalacion, porcentaje_practicas')
-      .eq('usuario_id', usuarioId)
-      .maybeSingle()
-
-    if (errProf) console.error('Error al cargar profesional:', errProf)
+    const profs = await api.get<any[]>(`/profesionales?usuario_id=${usuarioId}`)
+    let prof = profs?.[0] || null
 
     if (!prof) {
-      const { data: u } = await supabase.from('usuarios').select('nombre').eq('id', usuarioId).single()
-      const nombre_corto = u?.nombre?.split(' ')[0] || 'Prof'
-      const { data: nuevo, error: errCrear } = await supabase
-        .from('profesionales')
-        .insert({ usuario_id: usuarioId, nombre_corto, activo: true })
-        .select('id').single()
-      if (errCrear) { console.error('Error al crear profesional:', errCrear); return }
-      if (nuevo) { setProfesionalId(nuevo.id); cargarHorarios(nuevo.id) }
-      return
+      const usuarioData = await api.get<{ nombre: string }>(`/usuarios/${usuarioId}`)
+      const nombre_corto = usuarioData?.nombre?.split(' ')[0] || 'Prof'
+      prof = await api.post<any>('/profesionales', {
+        usuario_id: usuarioId,
+        nombre: usuarioData?.nombre || '',
+        apellido: '',
+        nombre_corto,
+        activo: true,
+      })
     }
+
+    if (!prof) return
 
     setProfesionalId(prof.id)
     cargarHorarios(prof.id)
 
-    // Especialidades
-    const { data: profEsps } = await supabase
-      .from('profesional_especialidades').select('especialidad_id').eq('profesional_id', prof.id)
-    const ids = (profEsps || []).map((e: any) => e.especialidad_id)
+    const ids = (prof.especialidades || []).map((e: any) => e.especialidad_id)
     setEspAsignadas(ids)
     setEspSeleccionadas(ids)
 
-    // Porcentajes base
     const pctInst = prof.porcentaje_instalacion?.toString() || ''
     const pctPrac = prof.porcentaje_practicas?.toString() || ''
     setPorcentajeInstalacion(pctInst)
@@ -135,29 +122,23 @@ export default function FichaUsuario() {
     setPctInstalacionGuardado(pctInst)
     setPctPracticasGuardado(pctPrac)
 
-    // Porcentajes por especialidad
-    const { data: pctEsps } = await supabase
-      .from('profesional_porcentajes_especialidad')
-      .select('id, especialidad_id, porcentaje')
-      .eq('profesional_id', prof.id)
-    const lista = pctEsps || []
+    const lista = (prof.porcentajes || []).map((p: any) => ({
+      id: p.id,
+      especialidad_id: p.especialidad_id,
+      porcentaje: p.porcentaje,
+    }))
     setPorcentajesEsp(lista)
     setPctEspGuardado(lista)
   }
 
   async function cargarHorarios(profId: string) {
-    const { data } = await supabase
-      .from('profesional_horarios')
-      .select('*, sucursales(nombre)')
-      .eq('profesional_id', profId)
-      .eq('activo', true)
-      .order('sucursal_id').order('dia_semana')
+    const data = await api.get<Horario[]>(`/horarios-profesionales?profesional_id=${profId}&activo=true`)
     setHorarios(data || [])
   }
 
   async function confirmarYEliminarHorario() {
     if (!confirmarEliminarHorario) return
-    await supabase.from('profesional_horarios').delete().eq('id', confirmarEliminarHorario)
+    await api.delete(`/horarios-profesionales/${confirmarEliminarHorario}`)
     setConfirmarEliminarHorario(null)
     if (profesionalId) cargarHorarios(profesionalId)
   }
@@ -165,48 +146,41 @@ export default function FichaUsuario() {
   async function guardarCambios() {
     setGuardando(true); setError('')
 
-    const { error: updateError } = await supabase
-      .from('usuarios')
-      .update({ nombre: form.nombre, rol: form.rol, sucursal_id: form.sucursal_id })
-      .eq('id', id)
+    try {
+      await api.put(`/usuarios/${id}`, {
+        nombre: form.nombre,
+        rol: form.rol,
+        sucursal_id: form.sucursal_id,
+      })
 
-    if (updateError) { setError('Error al guardar'); setGuardando(false); return }
+      if (form.rol === 'profesional' && profesionalId) {
+        await api.put(`/profesionales/${profesionalId}/especialidades`, {
+          especialidades: espSeleccionadas,
+        })
+        setEspAsignadas(espSeleccionadas)
 
-    if (form.rol === 'profesional' && profesionalId) {
-      // Especialidades
-      await supabase.from('profesional_especialidades').delete().eq('profesional_id', profesionalId)
-      if (espSeleccionadas.length > 0) {
-        await supabase.from('profesional_especialidades').insert(
-          espSeleccionadas.map(espId => ({ profesional_id: profesionalId, especialidad_id: espId }))
-        )
+        await api.put(`/profesionales/${profesionalId}`, {
+          porcentaje_instalacion: porcentajeInstalacion ? parseFloat(porcentajeInstalacion) : null,
+          porcentaje_practicas: porcentajePracticas ? parseFloat(porcentajePracticas) : null,
+        })
+        setPctInstalacionGuardado(porcentajeInstalacion)
+        setPctPracticasGuardado(porcentajePracticas)
+
+        const validos = porcentajesEsp.filter(p => p.especialidad_id && p.porcentaje > 0)
+        await api.put(`/profesionales/${profesionalId}/porcentajes`, { porcentajes: validos })
+        setPctEspGuardado(validos)
+        setPorcentajesEsp(validos)
       }
-      setEspAsignadas(espSeleccionadas)
 
-      // Porcentajes base
-      await supabase.from('profesionales').update({
-        porcentaje_instalacion: porcentajeInstalacion ? parseFloat(porcentajeInstalacion) : null,
-        porcentaje_practicas: porcentajePracticas ? parseFloat(porcentajePracticas) : null,
-      }).eq('id', profesionalId)
-      setPctInstalacionGuardado(porcentajeInstalacion)
-      setPctPracticasGuardado(porcentajePracticas)
+      if (form.rol === 'profesional' && !profesionalId && id) await cargarProfesional(id)
 
-      // Porcentajes por especialidad: borrar y reinsertar
-      await supabase.from('profesional_porcentajes_especialidad').delete().eq('profesional_id', profesionalId)
-      const validos = porcentajesEsp.filter(p => p.especialidad_id && p.porcentaje > 0)
-      if (validos.length > 0) {
-        await supabase.from('profesional_porcentajes_especialidad').insert(
-          validos.map(p => ({ profesional_id: profesionalId, especialidad_id: p.especialidad_id, porcentaje: p.porcentaje }))
-        )
-      }
-      setPctEspGuardado(validos)
-      setPorcentajesEsp(validos)
+      setUsuario(prev => prev ? { ...prev, ...form } : null)
+      setEditando(false)
+    } catch (err: any) {
+      setError('Error al guardar: ' + err.message)
+    } finally {
+      setGuardando(false)
     }
-
-    if (form.rol === 'profesional' && !profesionalId && id) await cargarProfesional(id)
-
-    setUsuario(prev => prev ? { ...prev, ...form } : null)
-    setEditando(false)
-    setGuardando(false)
   }
 
   function cancelarEdicion() {
@@ -232,15 +206,17 @@ export default function FichaUsuario() {
   }
 
   async function desactivarUsuario() {
-    const { error } = await supabase.from('usuarios').update({ activo: false }).eq('id', id)
-    if (!error) navigate('/usuarios')
-    else setError('Error al desactivar')
+    try {
+      await api.put(`/usuarios/${id}`, { activo: false })
+      navigate('/usuarios')
+    } catch {
+      setError('Error al desactivar')
+    }
     setConfirmarDesactivar(false)
   }
 
   async function eliminarUsuario() {
-    await supabase.from('usuarios').delete().eq('id', id)
-    await supabase.functions.invoke('eliminar-usuario', { body: { userId: id } })
+    await api.delete(`/usuarios/${id}`)
     navigate('/usuarios')
     setConfirmarEliminar(false)
   }
@@ -249,13 +225,13 @@ export default function FichaUsuario() {
     setEspSeleccionadas(prev => prev.includes(espId) ? prev.filter(e => e !== espId) : [...prev, espId])
   }
 
-  const puedeGestionar = rolActual === 'super_admin'
-  const puedeDesactivar = puedeGestionar && usuario?.rol !== 'super_admin'
-  const puedeEliminar = rolActual === 'super_admin' && usuario?.rol !== 'super_admin'
+  const puedeGestionar = ['admin', 'super_admin'].includes(rolActual)
+  const puedeDesactivar = puedeGestionar && usuario?.rol !== 'admin' && usuario?.rol !== 'super_admin'
+  const puedeEliminar = puedeGestionar && usuario?.rol !== 'admin' && usuario?.rol !== 'super_admin'
 
   const etiquetaRol: Record<string, string> = {
-    super_admin: '👑 Super Admin', jefe_clinica: '🏥 Jefe de Clínica',
-    profesional: '🦷 Profesional', secretaria: '💼 Secretaria',
+    admin: '👑 Admin', super_admin: '👑 Super Admin', jefe_clinica: '🏥 Jefe de Clínica',
+    profesional: '🦷 Profesional', secretaria: '💼 Secretaria', recepcionista: '💼 Recepcionista',
     telemarketer: '📞 Telemarketer', asistente: '🤝 Asistente', supervisora: '👁️ Supervisora',
   }
 
@@ -324,9 +300,7 @@ export default function FichaUsuario() {
         {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
 
         <div className="space-y-6">
-          {/* Fila 1: Datos + Especialidades */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Datos del usuario */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
               <h2 className="font-semibold text-gray-800 mb-4">Datos del usuario</h2>
               <div className="space-y-3">
@@ -339,6 +313,7 @@ export default function FichaUsuario() {
                     <select value={form.rol} onChange={e => setForm({ ...form, rol: e.target.value })}
                       className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                       <option value="secretaria">Secretaria</option>
+                      <option value="recepcionista">Recepcionista</option>
                       <option value="telemarketer">Telemarketer</option>
                       <option value="asistente">Asistente</option>
                       <option value="supervisora">Supervisora</option>
@@ -365,7 +340,6 @@ export default function FichaUsuario() {
               </div>
             </div>
 
-            {/* Especialidades */}
             {usuario.rol === 'profesional' && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
                 <h2 className="font-semibold text-gray-800 mb-4">Especialidades</h2>
@@ -397,12 +371,10 @@ export default function FichaUsuario() {
             )}
           </div>
 
-          {/* Porcentajes de ganancia */}
           {usuario.rol === 'profesional' && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
               <h2 className="font-semibold text-gray-800 mb-4">Porcentajes de ganancia</h2>
 
-              {/* Porcentaje instalación y prácticas */}
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                   <p className="text-xs text-gray-400 mb-1">Porcentaje Instalación (%)</p>
@@ -434,7 +406,6 @@ export default function FichaUsuario() {
                 </div>
               </div>
 
-              {/* Porcentajes por especialidad */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs text-gray-500 font-medium">Porcentajes por especialidad</p>
@@ -501,7 +472,6 @@ export default function FichaUsuario() {
             </div>
           )}
 
-          {/* Horarios */}
           {usuario.rol === 'profesional' && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
               <div className="flex justify-between items-center mb-4">
@@ -560,7 +530,6 @@ export default function FichaUsuario() {
           )}
         </div>
 
-        {/* Modales */}
         {mostrarFormHorario && profesionalId && (
           <FormularioHorario profesionalId={profesionalId} horariosExistentes={horarios} sucursales={sucursales}
             onClose={() => setMostrarFormHorario(false)}
@@ -668,13 +637,13 @@ function FormularioHorario({ profesionalId, horariosExistentes, sucursales, hora
     const tieneTarde = mismos.find(h => h.turno === 'tarde')
 
     if (form.turno === 'tarde' && tieneMañana) {
-      await supabase.from('profesional_horarios').delete().eq('id', tieneMañana.id)
-      await supabase.from('profesional_horarios').insert({ profesional_id: profesionalId, sucursal_id: form.sucursal_id, dia_semana: form.dia_semana, turno: 'completo', hora_inicio: '08:00', hora_fin: '20:00', activo: true })
+      await api.delete(`/horarios-profesionales/${tieneMañana.id}`)
+      await api.post('/horarios-profesionales', { profesional_id: profesionalId, sucursal_id: form.sucursal_id, dia_semana: form.dia_semana, turno: 'completo', hora_inicio: '08:00', hora_fin: '20:00' })
       return true
     }
     if (form.turno === 'mañana' && tieneTarde) {
-      await supabase.from('profesional_horarios').delete().eq('id', tieneTarde.id)
-      await supabase.from('profesional_horarios').insert({ profesional_id: profesionalId, sucursal_id: form.sucursal_id, dia_semana: form.dia_semana, turno: 'completo', hora_inicio: '08:00', hora_fin: '20:00', activo: true })
+      await api.delete(`/horarios-profesionales/${tieneTarde.id}`)
+      await api.post('/horarios-profesionales', { profesional_id: profesionalId, sucursal_id: form.sucursal_id, dia_semana: form.dia_semana, turno: 'completo', hora_inicio: '08:00', hora_fin: '20:00' })
       return true
     }
     return false
@@ -684,21 +653,25 @@ function FormularioHorario({ profesionalId, horariosExistentes, sucursales, hora
     e.preventDefault(); setLoading(true); setError('')
     const conflicto = verificarConflictoSucursal()
     if (conflicto) { setError(conflicto); setLoading(false); return }
-    if (!horarioEditar) {
-      const unificado = await unificarSiCorresponde()
-      if (unificado) { onGuardado(); return }
+    try {
+      if (!horarioEditar) {
+        const unificado = await unificarSiCorresponde()
+        if (unificado) { onGuardado(); return }
+      }
+      if (horarioEditar?.id) {
+        await api.put(`/horarios-profesionales/${horarioEditar.id}`, {
+          sucursal_id: form.sucursal_id, dia_semana: form.dia_semana,
+          turno: form.turno, hora_inicio: form.hora_inicio, hora_fin: form.hora_fin
+        })
+      } else {
+        await api.post('/horarios-profesionales', { ...form, profesional_id: profesionalId })
+      }
+      onGuardado()
+    } catch (err: any) {
+      setError(err.message || 'Error al guardar')
+    } finally {
+      setLoading(false)
     }
-    if (horarioEditar?.id) {
-      const { error: err } = await supabase.from('profesional_horarios').update({
-        sucursal_id: form.sucursal_id, dia_semana: form.dia_semana,
-        turno: form.turno, hora_inicio: form.hora_inicio, hora_fin: form.hora_fin
-      }).eq('id', horarioEditar.id)
-      if (err) { setError('Error al guardar'); setLoading(false); return }
-    } else {
-      const { error: err } = await supabase.from('profesional_horarios').insert({ ...form, profesional_id: profesionalId, activo: true })
-      if (err) { setError(err.message.includes('unique') ? 'Ya existe un horario para ese día y turno en esa sucursal' : `Error: ${err.message}`); setLoading(false); return }
-    }
-    onGuardado(); setLoading(false)
   }
 
   return (

@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { getUser } from '../lib/auth'
+import api from '../services/api'
 import { Search, Plus, X } from 'lucide-react'
 
 type Usuario = {
   id: string
   nombre: string
+  apellido: string
   email: string
   rol: string
   activo: boolean
-  sucursales: { nombre: string }
+  sucursales: { nombre: string } | null
 }
 
 type Especialidad = {
@@ -36,51 +38,47 @@ export default function Usuarios() {
   const navigate = useNavigate()
 
   useEffect(() => {
+    const u = getUser()
+    setRolUsuarioActual(u?.rol || '')
     cargarDatos()
-    cargarRolActual()
   }, [])
-
-  async function cargarRolActual() {
-    const { data } = await supabase.auth.getUser()
-    if (data.user) {
-      const { data: u } = await supabase
-        .from('usuarios').select('rol').eq('id', data.user.id).single()
-      setRolUsuarioActual(u?.rol || '')
-    }
-  }
 
   async function cargarDatos() {
     setLoading(true)
-    const [{ data: users }, { data: esps }, { data: sucs }] = await Promise.all([
-      supabase.from('usuarios').select('*, sucursales(nombre)').eq('activo', true).order('nombre'),
-      supabase.from('especialidades').select('*').order('nombre'),
-      supabase.from('sucursales').select('*').eq('activa', true)
-    ])
-    setUsuarios(users || [])
-    setEspecialidades(esps || [])
-    setSucursales(sucs || [])
-    setLoading(false)
+    try {
+      const [users, esps, sucs] = await Promise.all([
+        api.get<Usuario[]>('/usuarios?activo=true'),
+        api.get<Especialidad[]>('/especialidades'),
+        api.get<Sucursal[]>('/sucursales'),
+      ])
+      setUsuarios(users || [])
+      setEspecialidades(esps || [])
+      setSucursales(sucs || [])
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function cargarDesactivados() {
-    const { data } = await supabase
-      .from('usuarios').select('*, sucursales(nombre)').eq('activo', false).order('nombre')
+    const data = await api.get<Usuario[]>('/usuarios?activo=false')
     setDesactivados(data || [])
   }
 
   async function restaurarUsuario(userId: string) {
-    await supabase.from('usuarios').update({ activo: true }).eq('id', userId)
+    await api.put(`/usuarios/${userId}`, { activo: true })
     cargarDesactivados()
     cargarDatos()
   }
 
-  const puedeGestionar = rolUsuarioActual === 'super_admin'
+  const puedeGestionar = ['admin', 'super_admin'].includes(rolUsuarioActual)
 
   const etiquetaRol: Record<string, string> = {
+    admin: '👑 Admin',
     super_admin: '👑 Super Admin',
     jefe_clinica: '🏥 Jefe de Clínica',
     profesional: '🦷 Profesional',
     secretaria: '💼 Secretaria',
+    recepcionista: '💼 Recepcionista',
     telemarketer: '📞 Telemarketer',
     asistente: '🤝 Asistente',
     supervisora: '👁️ Supervisora',
@@ -89,11 +87,11 @@ export default function Usuarios() {
   const usuariosPorTab = usuarios.filter(u =>
     tabActivo === 'profesionales'
       ? u.rol === 'profesional'
-      : ['secretaria', 'jefe_clinica', 'super_admin'].includes(u.rol)
+      : ['secretaria', 'recepcionista', 'jefe_clinica', 'admin', 'super_admin', 'telemarketer', 'asistente', 'supervisora'].includes(u.rol)
   )
 
   const usuariosFiltrados = usuariosPorTab.filter(u =>
-    u.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
+    `${u.nombre} ${u.apellido}`.toLowerCase().includes(busqueda.toLowerCase()) ||
     u.email.toLowerCase().includes(busqueda.toLowerCase())
   )
 
@@ -103,7 +101,7 @@ export default function Usuarios() {
       <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-100">
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Usuarios</h1>
         <div className="flex gap-2">
-          {rolUsuarioActual === 'super_admin' && (
+          {puedeGestionar && (
             <button
               onClick={() => { setVerDesactivados(true); cargarDesactivados() }}
               className="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg text-sm hover:bg-gray-50"
@@ -171,7 +169,7 @@ export default function Usuarios() {
             ) : (
               usuariosFiltrados.map(u => (
                 <tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-800">{u.nombre}</td>
+                  <td className="px-4 py-3 font-medium text-gray-800">{u.nombre} {u.apellido}</td>
                   <td className="px-4 py-3 text-gray-600">{u.email}</td>
                   <td className="px-4 py-3">
                     <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-medium">
@@ -219,7 +217,7 @@ export default function Usuarios() {
                 {desactivados.map(u => (
                   <div key={u.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                     <div>
-                      <p className="text-sm font-medium text-gray-800">{u.nombre}</p>
+                      <p className="text-sm font-medium text-gray-800">{u.nombre} {u.apellido}</p>
                       <p className="text-xs text-gray-500">{u.email} · {etiquetaRol[u.rol] || u.rol}</p>
                     </div>
                     <button
@@ -250,7 +248,7 @@ function FormularioUsuario({
 }) {
   const [tipo, setTipo] = useState<'administrativo' | 'profesional'>('administrativo')
   const [form, setForm] = useState({
-    nombre: '', email: '', password: '', rol: 'secretaria', sucursal_id: ''
+    nombre: '', apellido: '', email: '', password: '', rol: 'secretaria', sucursal_id: ''
   })
   const [especialidadesSeleccionadas, setEspecialidadesSeleccionadas] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
@@ -279,30 +277,38 @@ function FormularioUsuario({
       return
     }
 
-    const { data, error: fnError } = await supabase.functions.invoke('crear-usuario', {
-      body: {
+    try {
+      const rolFinal = tipo === 'profesional' ? 'profesional' : form.rol
+      const usuario = await api.post<{ id: string; nombre: string; apellido: string }>('/usuarios', {
         nombre: form.nombre,
+        apellido: form.apellido,
         email: form.email,
         password: form.password,
-        rol: tipo === 'profesional' ? 'profesional' : form.rol,
+        rol: rolFinal,
         sucursal_id: form.sucursal_id,
-        especialidades: especialidadesSeleccionadas
-      }
-    })
+      })
 
-    if (fnError || data?.error) {
-      const msg = data?.error || fnError?.message || ''
-      if (msg.includes('already registered') || msg.includes('already been registered')) {
-        setError('Ya existe un usuario con ese email')
-      } else {
-        setError('Error al crear usuario: ' + msg)
+      if (tipo === 'profesional') {
+        const prof = await api.post<{ id: string }>('/profesionales', {
+          nombre: form.nombre,
+          apellido: form.apellido,
+          email: form.email,
+          usuario_id: usuario.id,
+          nombre_corto: form.nombre,
+        })
+        if (especialidadesSeleccionadas.length > 0) {
+          await api.put(`/profesionales/${prof.id}/especialidades`, {
+            especialidades: especialidadesSeleccionadas,
+          })
+        }
       }
+
+      onGuardado()
+    } catch (err: any) {
+      setError(err.message || 'Error al crear usuario')
+    } finally {
       setLoading(false)
-      return
     }
-
-    onGuardado()
-    setLoading(false)
   }
 
   return (
@@ -334,10 +340,20 @@ function FormularioUsuario({
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nombre completo *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
             <input
               value={form.nombre}
               onChange={e => setForm({ ...form, nombre: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Apellido *</label>
+            <input
+              value={form.apellido}
+              onChange={e => setForm({ ...form, apellido: e.target.value })}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
             />
@@ -376,6 +392,7 @@ function FormularioUsuario({
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="secretaria">Secretaria</option>
+                <option value="recepcionista">Recepcionista</option>
                 <option value="telemarketer">Telemarketer</option>
                 <option value="asistente">Asistente</option>
                 <option value="supervisora">Supervisora</option>

@@ -1,8 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { supabase } from './lib/supabase'
-import type { Session } from '@supabase/supabase-js'
 import { Eye, EyeOff, ShieldAlert } from 'lucide-react'
+import { login as authLogin, logout as authLogout, getUser, isAuthenticated, type User } from './lib/auth'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Pacientes from './pages/Pacientes'
@@ -22,22 +21,24 @@ const AVISO_SEG        = 60       // aviso 60s antes de cerrar sesión
 
 // ── Componente principal ───────────────────────────────────────────────────
 function App() {
-  const [session, setSession] = useState<Session | null>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setLoading(false)
-    })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN') {
-        window.history.replaceState({}, '', '/')
-      }
-      setSession(session)
-    })
-    return () => subscription.unsubscribe()
+    if (isAuthenticated()) {
+      setUser(getUser())
+    }
+    setLoading(false)
   }, [])
+
+  function handleLogin(u: User) {
+    setUser(u)
+  }
+
+  function handleLogout() {
+    authLogout()
+    setUser(null)
+  }
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -45,21 +46,21 @@ function App() {
     </div>
   )
 
-  if (!session) return (
+  if (!user) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="relative bg-white rounded-xl shadow-md w-full max-w-sm overflow-hidden">
-        <img src="/logo.jpg" alt="Ortodoncias L&D"
+        <img src="/logo.jpg" alt="Clínica Odontológica"
           className="absolute inset-0 w-full h-full object-cover opacity-40"
           style={{ objectPosition: '15% 65%' }} />
         <div className="relative z-10 px-8 py-10">
-          <LoginForm />
+          <LoginForm onLogin={handleLogin} />
         </div>
       </div>
     </div>
   )
 
   return (
-    <InactividadGuarda>
+    <InactividadGuarda onLogout={handleLogout}>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Layout />}>
@@ -68,17 +69,17 @@ function App() {
             <Route path="pacientes/:id" element={<FichaPaciente />} />
             <Route path="agenda" element={<Agenda />} />
             <Route path="practicas" element={
-              <RutaProtegida rolesPermitidos={['super_admin', 'jefe_clinica']}>
+              <RutaProtegida rolesPermitidos={['admin', 'super_admin', 'jefe_clinica']}>
                 <Practicas />
               </RutaProtegida>
             } />
             <Route path="usuarios" element={
-              <RutaProtegida rolesPermitidos={['super_admin', 'jefe_clinica']}>
+              <RutaProtegida rolesPermitidos={['admin', 'super_admin', 'jefe_clinica']}>
                 <Usuarios />
               </RutaProtegida>
             } />
             <Route path="usuarios/:id" element={
-              <RutaProtegida rolesPermitidos={['super_admin', 'jefe_clinica']}>
+              <RutaProtegida rolesPermitidos={['admin', 'super_admin', 'jefe_clinica']}>
                 <FichaUsuario />
               </RutaProtegida>
             } />
@@ -91,7 +92,7 @@ function App() {
 }
 
 // ── Login con seguridad ────────────────────────────────────────────────────
-function LoginForm() {
+function LoginForm({ onLogin }: { onLogin: (u: User) => void }) {
   const [email, setEmail]           = useState('')
   const [password, setPassword]     = useState('')
   const [error, setError]           = useState('')
@@ -101,7 +102,6 @@ function LoginForm() {
   const [bloqueadoHasta, setBloqueadoHasta] = useState<number | null>(null)
   const [segsBloqueo, setSegsBloqueo] = useState(0)
 
-  // Cuenta regresiva cuando está bloqueado
   useEffect(() => {
     if (!bloqueadoHasta) return
     const interval = setInterval(() => {
@@ -126,9 +126,10 @@ function LoginForm() {
     setLoading(true)
     setError('')
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-
-    if (error) {
+    try {
+      const user = await authLogin(email, password)
+      onLogin(user)
+    } catch (err: any) {
       const nuevos = intentos + 1
       setIntentos(nuevos)
       if (nuevos >= MAX_INTENTOS) {
@@ -180,7 +181,6 @@ function LoginForm() {
         </div>
       </div>
 
-      {/* Barra visual de intentos */}
       {intentos > 0 && !estaBloqueado && (
         <div className="flex gap-1">
           {Array.from({ length: MAX_INTENTOS }).map((_, i) => (
@@ -194,7 +194,6 @@ function LoginForm() {
         </div>
       )}
 
-      {/* Mensaje de error o bloqueo */}
       {error && (
         <div className={`flex items-start gap-2 rounded-lg px-3 py-2 text-sm ${
           estaBloqueado
@@ -226,7 +225,7 @@ function LoginForm() {
 }
 
 // ── Timeout de sesión por inactividad ─────────────────────────────────────
-function InactividadGuarda({ children }: { children: React.ReactNode }) {
+function InactividadGuarda({ children, onLogout }: { children: React.ReactNode; onLogout: () => void }) {
   const [segsRestantes, setSegsRestantes] = useState<number | null>(null)
   const ultimaActividadRef = useRef(Date.now())
 
@@ -244,7 +243,7 @@ function InactividadGuarda({ children }: { children: React.ReactNode }) {
       const restantes   = INACTIVIDAD_SEG - inactivoSeg
 
       if (restantes <= 0) {
-        supabase.auth.signOut()
+        onLogout()
       } else if (restantes <= AVISO_SEG) {
         setSegsRestantes(restantes)
       } else {
@@ -256,13 +255,12 @@ function InactividadGuarda({ children }: { children: React.ReactNode }) {
       eventos.forEach(ev => window.removeEventListener(ev, registrarActividad))
       clearInterval(interval)
     }
-  }, [registrarActividad])
+  }, [registrarActividad, onLogout])
 
   return (
     <>
       {children}
 
-      {/* Banner de advertencia de inactividad */}
       {segsRestantes !== null && (
         <div className="fixed bottom-5 right-5 z-50 bg-white border border-orange-300 rounded-xl shadow-xl p-4 max-w-xs animate-fade-in">
           <div className="flex items-center gap-2 mb-2">

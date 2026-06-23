@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
 import api from '../services/api'
+import { getUser } from '../lib/auth'
 import { Search, Plus, X } from 'lucide-react'
 
 type Paciente = {
@@ -81,13 +81,9 @@ export default function Pacientes() {
     cargarRol()
   }, [])
 
-  async function cargarRol() {
-    const { data } = await supabase.auth.getUser()
-    if (data.user) {
-      const { data: u } = await supabase
-        .from('usuarios').select('rol').eq('id', data.user.id).single()
-      setRolUsuario(u?.rol || '')
-    }
+  function cargarRol() {
+    const u = getUser()
+    setRolUsuario(u?.rol || '')
   }
 
   async function cargarPacientes() {

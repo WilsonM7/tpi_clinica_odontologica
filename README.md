@@ -10,7 +10,7 @@ Aplicación web para la gestión de una clínica odontológica. Permite administ
 
 **Frontend:** React + Vite + TypeScript, Tailwind CSS  
 **Backend:** Node.js + Express, Sequelize v6, SQLite  
-**Autenticación:** Supabase Auth (pendiente de migración al backend propio)
+**Autenticación:** JWT propio con bcrypt (sin servicios externos)
 
 ---
 
@@ -58,10 +58,21 @@ npm run dev      # Inicia la app en http://localhost:5173
 
 Tanto el backend como el frontend requieren un archivo `.env` en su carpeta respectiva. Cada uno tiene un `.env.example` como referencia.
 
-**Backend (`backend/.env`):** configuración de puerto, base de datos y claves de Supabase.  
-**Frontend (`frontend/.env`):** URL del backend y claves de Supabase para autenticación.
+**Backend (`backend/.env`):** puerto, ruta de la base de datos y clave secreta JWT.  
+**Frontend (`frontend/.env`):** URL del backend (`VITE_API_URL`).
 
 No commitear archivos `.env` con valores reales.
+
+---
+
+## Usuarios de prueba (generados por el seed)
+
+| Email | Contraseña | Rol |
+|-------|------------|-----|
+| admin@clinica.com | clinica123 | Admin |
+| recepcion@clinica.com | clinica123 | Recepcionista |
+| dr.perez@clinica.com | clinica123 | Profesional |
+| dra.lopez@clinica.com | clinica123 | Profesional |
 
 ---
 
@@ -75,7 +86,7 @@ Hay que correrlo al menos una vez antes de usar la app, y también cada vez que 
 
 ## Funcionalidades principales
 
-- Login con sesión persistente
+- Login con sesión persistente (JWT)
 - Gestión de pacientes (alta, edición, búsqueda, desactivación)
 - Ficha de paciente con historial de tratamientos y cobros
 - Agenda de turnos semanal/mensual para una sede

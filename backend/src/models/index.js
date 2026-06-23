@@ -30,6 +30,10 @@ Consultorio.belongsTo(Sucursal, { foreignKey: 'sucursal_id', as: 'sucursal' })
 Sucursal.hasMany(DiaInhabilitado, { foreignKey: 'sucursal_id', as: 'dias_inhabilitados' })
 DiaInhabilitado.belongsTo(Sucursal, { foreignKey: 'sucursal_id', as: 'sucursal' })
 
+// Usuario <-> Sucursal
+Usuario.belongsTo(Sucursal, { foreignKey: 'sucursal_id', as: 'sucursal' })
+Sucursal.hasMany(Usuario, { foreignKey: 'sucursal_id', as: 'usuarios' })
+
 // Usuario <-> Profesional
 Usuario.hasOne(Profesional, { foreignKey: 'usuario_id', as: 'profesional' })
 Profesional.belongsTo(Usuario, { foreignKey: 'usuario_id', as: 'usuario' })

@@ -1,4 +1,5 @@
 require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') })
+const bcrypt = require('bcryptjs')
 const {
   sequelize,
   Especialidad,
@@ -48,11 +49,12 @@ async function seed() {
   console.log('✅ Consultorios listos')
 
   // ── Usuarios ──────────────────────────────────────────────────────────────
-  const usuarioAdmin = await Usuario.create({ email: 'admin@clinica.com', nombre: 'Admin', apellido: 'Sistema', rol: 'admin', activo: true })
-  await Usuario.create({ email: 'recepcion@clinica.com', nombre: 'Laura', apellido: 'Gómez', rol: 'recepcionista', activo: true })
-  const usuarioPro1 = await Usuario.create({ email: 'dr.perez@clinica.com', nombre: 'Carlos', apellido: 'Pérez', rol: 'profesional', activo: true })
-  const usuarioPro2 = await Usuario.create({ email: 'dra.lopez@clinica.com', nombre: 'María', apellido: 'López', rol: 'profesional', activo: true })
-  console.log('✅ Usuarios listos')
+  const hash = await bcrypt.hash('clinica123', 10)
+  const usuarioAdmin = await Usuario.create({ email: 'admin@clinica.com', nombre: 'Admin', apellido: 'Sistema', rol: 'admin', activo: true, sucursal_id: sucursalCentro.id, password: hash })
+  await Usuario.create({ email: 'recepcion@clinica.com', nombre: 'Laura', apellido: 'Gómez', rol: 'recepcionista', activo: true, sucursal_id: sucursalCentro.id, password: hash })
+  const usuarioPro1 = await Usuario.create({ email: 'dr.perez@clinica.com', nombre: 'Carlos', apellido: 'Pérez', rol: 'profesional', activo: true, sucursal_id: sucursalCentro.id, password: hash })
+  const usuarioPro2 = await Usuario.create({ email: 'dra.lopez@clinica.com', nombre: 'María', apellido: 'López', rol: 'profesional', activo: true, sucursal_id: sucursalCentro.id, password: hash })
+  console.log('✅ Usuarios listos (contraseña: clinica123)')
 
   // ── Profesionales ─────────────────────────────────────────────────────────
   const prof1 = await Profesional.create({
@@ -112,7 +114,7 @@ async function seed() {
 
   // ── Configuración ─────────────────────────────────────────────────────────
   const configs = [
-    { clave: 'nombre_clinica', valor: 'Clínica Odontológica L&D', descripcion: 'Nombre de la clínica' },
+    { clave: 'nombre_clinica', valor: 'Clínica Odontológica', descripcion: 'Nombre de la clínica' },
     { clave: 'duracion_turno_minutos', valor: '30', descripcion: 'Duración predeterminada de un turno en minutos' },
     { clave: 'hora_apertura', valor: '08:00', descripcion: 'Hora de apertura general' },
     { clave: 'hora_cierre', valor: '19:45', descripcion: 'Hora de cierre general' },

@@ -1,10 +1,10 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Calendar,
   UserCog, LogOut, ChevronLeft, ChevronRight,
   Stethoscope
 } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { logout } from '../lib/auth'
 
 const menu = [
   { path: '/',              icon: LayoutDashboard, label: 'Home' },
@@ -17,16 +17,22 @@ const menu = [
 type SidebarProps = { collapsed: boolean; onToggle: () => void }
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+  const navigate = useNavigate()
+
+  function handleLogout() {
+    logout()
+    navigate('/')
+    window.location.reload()
+  }
+
   return (
     <aside className={`h-screen bg-white border-r border-gray-200 flex flex-col transition-all duration-200 flex-shrink-0 relative ${collapsed ? 'w-16' : 'w-56'}`}>
 
-      {/* Header: solo logo, sin botón encima */}
       <div className={`border-b border-gray-200 flex items-center justify-center ${collapsed ? 'py-4 px-2' : 'p-4'}`}>
-        <img src="/logo.jpg" alt="L&D"
+        <img src="/logo.jpg" alt="Clínica Odontológica"
           className={`object-cover rounded-full transition-all duration-200 ${collapsed ? 'h-8 w-8' : 'h-16 w-16'}`} />
       </div>
 
-      {/* Botón colapsar: pastilla en el borde derecho del sidebar, separado del logo */}
       <button
         onClick={onToggle}
         title={collapsed ? 'Expandir menú' : 'Colapsar menú'}
@@ -52,7 +58,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </nav>
 
       <div className="p-2 border-t border-gray-200">
-        <button onClick={() => supabase.auth.signOut()}
+        <button onClick={handleLogout}
           title={collapsed ? 'Cerrar sesión' : undefined}
           className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-red-50 hover:text-red-500 w-full transition-colors ${collapsed ? 'justify-center' : ''}`}>
           <LogOut size={18} className="flex-shrink-0" />
