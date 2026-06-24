@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useContext } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import api from '../services/api'
-import { getUser } from '../lib/auth'
+import { AuthContext } from '../context/AuthContext'
 import { ArrowLeft, Save, X, Pencil } from 'lucide-react'
 
 type Paciente = {
@@ -94,7 +94,7 @@ export default function FichaPaciente() {
   const [error, setError] = useState('')
   const [confirmarEliminar, setConfirmarEliminar] = useState(false)
   const [confirmarDesactivar, setConfirmarDesactivar] = useState(false)
-  const [rolUsuario, setRolUsuario] = useState('')
+  const { puedeDesactivarPaciente: puedeDesactivar, puedeEliminarPaciente: puedeEliminar } = useContext(AuthContext)
 
   const [editandoTratamiento, setEditandoTratamiento] = useState<string | null>(null)
   const [formTratamiento, setFormTratamiento] = useState<{ estado: string; profesional_id: string }>({ estado: '', profesional_id: '' })
@@ -102,14 +102,8 @@ export default function FichaPaciente() {
 
   useEffect(() => {
     cargarDatos()
-    cargarRol()
     cargarProfesionales()
   }, [id])
-
-  function cargarRol() {
-    const u = getUser()
-    setRolUsuario(u?.rol || '')
-  }
 
   async function cargarProfesionales() {
     try {
@@ -202,8 +196,6 @@ export default function FichaPaciente() {
   }
 
   const totalCobrado = cobros.reduce((acc, c) => acc + (c.monto || 0), 0)
-  const puedeDesactivar = rolUsuario === 'super_admin' || rolUsuario === 'jefe_clinica'
-  const puedeEliminar = rolUsuario === 'super_admin'
 
   function claseEstado(estado: string) {
     switch (estado) {

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
-import { getUser } from '../lib/auth'
+import { AuthContext } from '../context/AuthContext'
 import { Search, Plus, X } from 'lucide-react'
 
 type Paciente = {
@@ -73,18 +73,12 @@ export default function Pacientes() {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [verDesactivados, setVerDesactivados] = useState(false)
   const [desactivados, setDesactivados] = useState<Paciente[]>([])
-  const [rolUsuario, setRolUsuario] = useState('')
+  const { rol: rolUsuario } = useContext(AuthContext)
   const navigate = useNavigate()
 
   useEffect(() => {
     cargarPacientes()
-    cargarRol()
   }, [])
-
-  function cargarRol() {
-    const u = getUser()
-    setRolUsuario(u?.rol || '')
-  }
 
   async function cargarPacientes() {
     setLoading(true)

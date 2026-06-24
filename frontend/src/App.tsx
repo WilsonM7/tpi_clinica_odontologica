@@ -11,7 +11,9 @@ import Usuarios from './pages/Usuarios'
 import FichaUsuario from './pages/FichaUsuario'
 import Practicas from './pages/Practicas'
 import OrdenLlegada from './pages/OrdenLlegada'
+import NoEncontrado from './pages/NoEncontrado'
 import RutaProtegida from './components/RutaProtegida'
+import { AuthProvider } from './context/AuthContext'
 
 // ── Constantes de seguridad ────────────────────────────────────────────────
 const MAX_INTENTOS     = 3
@@ -60,34 +62,37 @@ function App() {
   )
 
   return (
-    <InactividadGuarda onLogout={handleLogout}>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="pacientes" element={<Pacientes />} />
-            <Route path="pacientes/:id" element={<FichaPaciente />} />
-            <Route path="agenda" element={<Agenda />} />
-            <Route path="practicas" element={
-              <RutaProtegida rolesPermitidos={['admin', 'super_admin', 'jefe_clinica']}>
-                <Practicas />
-              </RutaProtegida>
-            } />
-            <Route path="usuarios" element={
-              <RutaProtegida rolesPermitidos={['admin', 'super_admin', 'jefe_clinica']}>
-                <Usuarios />
-              </RutaProtegida>
-            } />
-            <Route path="usuarios/:id" element={
-              <RutaProtegida rolesPermitidos={['admin', 'super_admin', 'jefe_clinica']}>
-                <FichaUsuario />
-              </RutaProtegida>
-            } />
-            <Route path="orden-llegada" element={<OrdenLlegada />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </InactividadGuarda>
+    <AuthProvider user={user}>
+      <InactividadGuarda onLogout={handleLogout}>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Layout />}>
+              <Route index element={<Dashboard />} />
+              <Route path="pacientes" element={<Pacientes />} />
+              <Route path="pacientes/:id" element={<FichaPaciente />} />
+              <Route path="agenda" element={<Agenda />} />
+              <Route path="practicas" element={
+                <RutaProtegida rolesPermitidos={['admin', 'super_admin', 'jefe_clinica']}>
+                  <Practicas />
+                </RutaProtegida>
+              } />
+              <Route path="usuarios" element={
+                <RutaProtegida rolesPermitidos={['admin', 'super_admin', 'jefe_clinica']}>
+                  <Usuarios />
+                </RutaProtegida>
+              } />
+              <Route path="usuarios/:id" element={
+                <RutaProtegida rolesPermitidos={['admin', 'super_admin', 'jefe_clinica']}>
+                  <FichaUsuario />
+                </RutaProtegida>
+              } />
+              <Route path="orden-llegada" element={<OrdenLlegada />} />
+              <Route path="*" element={<NoEncontrado />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </InactividadGuarda>
+    </AuthProvider>
   )
 }
 

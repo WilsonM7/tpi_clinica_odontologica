@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useContext } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getUser } from '../lib/auth'
+import { AuthContext } from '../context/AuthContext'
 import api from '../services/api'
 import { ArrowLeft, Save, X, Plus, Trash2, Pencil } from 'lucide-react'
 
@@ -46,7 +46,7 @@ export default function FichaUsuario() {
   const [confirmarEliminar, setConfirmarEliminar] = useState(false)
   const [confirmarEliminarHorario, setConfirmarEliminarHorario] = useState<string | null>(null)
   const [horarioEditar, setHorarioEditar] = useState<Horario | null>(null)
-  const [rolActual, setRolActual] = useState('')
+  const { puedeGestionarUsuarios: puedeGestionar } = useContext(AuthContext)
   const [especialidades, setEspecialidades] = useState<Especialidad[]>([])
   const [sucursales, setSucursales] = useState<Sucursal[]>([])
   const [espAsignadas, setEspAsignadas] = useState<string[]>([])
@@ -64,8 +64,6 @@ export default function FichaUsuario() {
   const [pctEspGuardado, setPctEspGuardado] = useState<PorcentajeEsp[]>([])
 
   useEffect(() => {
-    const u = getUser()
-    setRolActual(u?.rol || '')
     cargarDatos()
   }, [id])
 
@@ -225,7 +223,6 @@ export default function FichaUsuario() {
     setEspSeleccionadas(prev => prev.includes(espId) ? prev.filter(e => e !== espId) : [...prev, espId])
   }
 
-  const puedeGestionar = ['admin', 'super_admin'].includes(rolActual)
   const puedeDesactivar = puedeGestionar && usuario?.rol !== 'admin' && usuario?.rol !== 'super_admin'
   const puedeEliminar = puedeGestionar && usuario?.rol !== 'admin' && usuario?.rol !== 'super_admin'
 
