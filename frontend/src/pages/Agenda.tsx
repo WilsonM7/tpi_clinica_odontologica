@@ -1,20 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useContext } from 'react'
 import api from '../services/api'
-import { getUser } from '../lib/auth'
+import { AuthContext } from '../context/AuthContext'
 import {
   ChevronLeft, ChevronRight, Search, SlidersHorizontal, X,
   BanIcon, MessageCircle, UserRound, PanelRightClose, PanelRightOpen
 } from 'lucide-react'
 import {
-  format, addDays, addWeeks, addMonths, addYears,
-  subDays, subWeeks, subMonths, subYears,
+  format, addDays, addWeeks, addMonths,
+  subDays, subWeeks, subMonths,
   startOfWeek, endOfWeek, startOfMonth, endOfMonth,
-  startOfYear, endOfYear, isSameDay, isSameMonth,
+  isSameDay, isSameMonth,
   isToday, eachDayOfInterval, eachWeekOfInterval,
 } from 'date-fns'
 import { es } from 'date-fns/locale'
 
-type Vista = 'dia' | 'semana' | 'mes' | 'año'
+type Vista = 'dia' | 'semana'
 
 type Turno = {
   id: string
@@ -57,9 +57,6 @@ const DIAS_NOMBRE_LARGO: Record<number, string> = {
   0: 'Domingo', 1: 'Lunes', 2: 'Martes', 3: 'Miércoles',
   4: 'Jueves', 5: 'Viernes', 6: 'Sábado'
 }
-const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
-const ROLES_PUEDEN_MODIFICAR = ['super_admin', 'jefe_clinica', 'secretaria', 'telemarketer', 'supervisora']
 
 const ESTADOS = [
   { value: 'ofrecido', label: 'Ofrecido', clase: 'bg-yellow-100 border-yellow-400 text-yellow-800' },
@@ -132,18 +129,14 @@ export default function Agenda() {
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<Turno | null>(null)
   const [fechaHoraSeleccionada, setFechaHoraSeleccionada] = useState<Date | null>(null)
   const [consultorioPreseleccionado, setConsultorioPreseleccionado] = useState<string>('')
-  const [horaActual, setHoraActual] = useState(new Date())
   const [miniCalAbierto, setMiniCalAbierto] = useState(true)
-  const [rolActual, setRolActual] = useState('')
+  const { puedeAgendar: puedeModificar } = useContext(AuthContext)
   const [horariosProf, setHorariosProf] = useState<HorarioProfesional[]>([])
   const [ausencias, setAusencias] = useState<AusenciaProfesional[]>([])
   const [diasInhabilitados, setDiasInhabilitados] = useState<DiaInhabilitado[]>([])
 
   useEffect(() => {
     cargarDatos()
-    cargarRolActual()
-    const interval = setInterval(() => setHoraActual(new Date()), 60000)
-    return () => clearInterval(interval)
   }, [])
 
   useEffect(() => {
@@ -162,17 +155,10 @@ export default function Agenda() {
       const hasta = new Date(fecha); hasta.setHours(23, 59, 59, 999)
       return { desde, hasta }
     }
-    if (v === 'semana') return {
+    return {
       desde: startOfWeek(fecha, { weekStartsOn: 1 }),
       hasta: endOfWeek(fecha, { weekStartsOn: 1 })
     }
-    if (v === 'mes') return { desde: startOfMonth(fecha), hasta: endOfMonth(fecha) }
-    return { desde: startOfYear(fecha), hasta: endOfYear(fecha) }
-  }
-
-  function cargarRolActual() {
-    const u = getUser()
-    setRolActual(u?.rol || '')
   }
 
   async function cargarDatos() {
@@ -290,24 +276,14 @@ export default function Agenda() {
 
   function navegar(dir: 1 | -1) {
     if (vista === 'dia') setFechaActual(dir === 1 ? addDays(fechaActual, 1) : subDays(fechaActual, 1))
-    else if (vista === 'semana') setFechaActual(dir === 1 ? addWeeks(fechaActual, 1) : subWeeks(fechaActual, 1))
-    else if (vista === 'mes') setFechaActual(dir === 1 ? addMonths(fechaActual, 1) : subMonths(fechaActual, 1))
-    else setFechaActual(dir === 1 ? addYears(fechaActual, 1) : subYears(fechaActual, 1))
+    else setFechaActual(dir === 1 ? addWeeks(fechaActual, 1) : subWeeks(fechaActual, 1))
   }
 
   function tituloNavegacion() {
     if (vista === 'dia') return format(fechaActual, "d 'de' MMMM yyyy", { locale: es })
-    if (vista === 'semana') {
-      const ini = startOfWeek(fechaActual, { weekStartsOn: 1 })
-      const fin = endOfWeek(fechaActual, { weekStartsOn: 1 })
-      return `${format(ini, 'd MMM', { locale: es })} - ${format(fin, 'd MMM yyyy', { locale: es })}`
-    }
-    if (vista === 'mes') return format(fechaActual, 'MMMM yyyy', { locale: es })
-    return format(fechaActual, 'yyyy')
-  }
-
-  function turnosDia(fecha: Date) {
-    return turnos.filter(t => isSameDay(toLocalAR(t.fecha_hora), fecha))
+    const ini = startOfWeek(fechaActual, { weekStartsOn: 1 })
+    const fin = endOfWeek(fechaActual, { weekStartsOn: 1 })
+    return `${format(ini, 'd MMM', { locale: es })} - ${format(fin, 'd MMM yyyy', { locale: es })}`
   }
 
   function turnosEnSlotDia(fecha: Date, hora: string) {
@@ -364,12 +340,6 @@ export default function Agenda() {
     return profesionalesActivosEnFecha(fecha, hora) > 0
   }
 
-  function posicionHoraActual() {
-    const h = horaActual.getHours(); const m = horaActual.getMinutes()
-    if (h < 8 || h >= 20) return -1
-    return ((h - 8) * 60 + m) / 15 * SLOT_H
-  }
-
   function headerDia(fecha: Date, compact = false): React.ReactNode {
     const diaInh = diaInhabilitado(fecha)
     if (compact) {
@@ -394,8 +364,6 @@ export default function Agenda() {
       </div>
     )
   }
-
-  const puedeModificar = ROLES_PUEDEN_MODIFICAR.includes(rolActual)
 
   const diasSemana = eachDayOfInterval({
     start: startOfWeek(fechaActual, { weekStartsOn: 1 }),
@@ -500,7 +468,6 @@ export default function Agenda() {
 
   function VistaDia() {
     const diaInh = diaInhabilitado(fechaActual)
-    const posLinea = posicionHoraActual()
     return (
       <div className="overflow-auto flex-1">
         <div className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm">
@@ -512,13 +479,6 @@ export default function Agenda() {
           </div>
           </div>
         <div className="flex relative">
-          {isToday(fechaActual) && posLinea >= 0 && (
-            <div className="absolute left-14 right-0 flex items-center z-10 pointer-events-none"
-              style={{ top: `${posLinea}px` }}>
-              <div className="w-2 h-2 rounded-full bg-red-500 -ml-1 flex-shrink-0" />
-              <div className="flex-1 h-0.5 bg-red-500" />
-            </div>
-          )}
           <ColumnaHoras />
           <div className="flex-1 min-w-0">
             <FilasCeldas fecha={fechaActual} />
@@ -529,7 +489,6 @@ export default function Agenda() {
   }
 
   function VistaSemana() {
-    const posLinea = posicionHoraActual()
     return (
       <div className="overflow-auto flex-1">
         <div className="flex sticky top-0 z-20 bg-white border-b border-gray-200">
@@ -549,13 +508,6 @@ export default function Agenda() {
           <ColumnaHoras />
           {diasSemana.map(dia => (
             <div key={dia.toISOString()} className="flex-1 border-r border-gray-200 last:border-r-0 relative" style={{ minWidth: 0 }}>
-              {isToday(dia) && posLinea >= 0 && (
-                <div className="absolute left-0 right-0 flex items-center z-10 pointer-events-none"
-                  style={{ top: `${posLinea}px` }}>
-                  <div className="w-2 h-2 rounded-full bg-red-500 -ml-1 flex-shrink-0" />
-                  <div className="flex-1 h-0.5 bg-red-500" />
-                </div>
-              )}
               <FilasCeldas fecha={dia} />
             </div>
           ))}
@@ -596,8 +548,6 @@ export default function Agenda() {
           className="border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none">
           <option value="dia">Día</option>
           <option value="semana">Semana</option>
-          <option value="mes">Mes</option>
-          <option value="año">Año</option>
         </select>
         <button onClick={() => setMiniCalAbierto(!miniCalAbierto)}
           className={`p-1.5 hover:bg-gray-100 rounded-lg flex-shrink-0 ${miniCalAbierto ? 'bg-blue-50' : ''}`}
@@ -682,75 +632,6 @@ export default function Agenda() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {vista === 'dia' && <VistaDia />}
           {vista === 'semana' && <VistaSemana />}
-          {vista === 'mes' && (
-            <div className="overflow-auto flex-1 p-2">
-              <div className="grid grid-cols-7 mb-1">
-                {['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM'].map(d => (
-                  <div key={d} className="text-center text-xs font-medium text-gray-500 py-1">{d}</div>
-                ))}
-              </div>
-              {eachWeekOfInterval({ start: startOfMonth(fechaActual), end: endOfMonth(fechaActual) }, { weekStartsOn: 1 }).map(semana => (
-                <div key={semana.toISOString()} className="grid grid-cols-7">
-                  {eachDayOfInterval({ start: semana, end: addDays(semana, 6) }).map(dia => {
-                    const ts = turnosDia(dia)
-                    const esEsteMes = isSameMonth(dia, fechaActual)
-                    const diaInh = diaInhabilitado(dia)
-                    return (
-                      <div key={dia.toISOString()}
-                        onClick={() => { setFechaActual(dia); setVista('dia') }}
-                        className={`min-h-20 border border-gray-100 p-1 cursor-pointer hover:bg-gray-50 ${!esEsteMes ? 'opacity-40' : ''} ${diaInh ? 'bg-orange-50' : ''}`}>
-                        <div className="flex items-center gap-1">
-                          <span className={`text-sm font-medium inline-flex items-center justify-center w-6 h-6 ${isToday(dia) ? 'bg-blue-600 text-white rounded-full' : 'text-gray-700'}`}>
-                            {format(dia, 'd')}
-                          </span>
-                          {diaInh && <span className="text-xs text-orange-500" title={diaInh.motivo}>🚫</span>}
-                        </div>
-                        <div className="mt-1 space-y-0.5">
-                          {ts.slice(0, 3).map(t => (
-                            <div key={t.id} className={`text-xs rounded px-1 truncate border-l-2 ${claseDeEstado(t.estado)}`}>
-                              {t.pacientes?.apellido_nombre}
-                            </div>
-                          ))}
-                          {ts.length > 3 && <div className="text-xs text-gray-500">+{ts.length - 3} más</div>}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              ))}
-            </div>
-          )}
-          {vista === 'año' && (
-            <div className="overflow-auto flex-1 p-6 grid grid-cols-4 gap-6">
-              {MESES.map((mes, idx) => {
-                const fechaMes = new Date(fechaActual.getFullYear(), idx, 1)
-                return (
-                  <div key={mes}>
-                    <h3 className="text-sm font-semibold text-gray-800 mb-2">{mes}</h3>
-                    <div className="grid grid-cols-7 gap-0">
-                      {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map(d => (
-                        <div key={d} className="text-center text-xs text-gray-400">{d}</div>
-                      ))}
-                      {eachWeekOfInterval({ start: startOfMonth(fechaMes), end: endOfMonth(fechaMes) }, { weekStartsOn: 1 }).map(semana =>
-                        eachDayOfInterval({ start: semana, end: addDays(semana, 6) }).map(dia => {
-                          const esEsteMes = isSameMonth(dia, fechaMes)
-                          const ts = turnosDia(dia)
-                          const diaInh = diaInhabilitado(dia)
-                          return (
-                            <div key={dia.toISOString()}
-                              onClick={() => { setFechaActual(dia); setVista('dia') }}
-                              className={`text-center text-xs py-0.5 cursor-pointer rounded ${!esEsteMes ? 'opacity-20' : ''} ${isToday(dia) ? 'bg-blue-600 text-white rounded-full' : diaInh ? 'bg-orange-100 text-orange-600' : ts.length > 0 ? 'text-blue-600 font-medium' : 'text-gray-700 hover:bg-blue-50'}`}>
-                              {format(dia, 'd')}
-                            </div>
-                          )
-                        })
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
         </div>
         {miniCalAbierto && (
           <div className="w-44 flex-shrink-0 border-l border-gray-200 bg-white p-3 overflow-y-auto">

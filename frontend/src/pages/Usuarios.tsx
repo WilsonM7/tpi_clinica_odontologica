@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getUser } from '../lib/auth'
+import { AuthContext } from '../context/AuthContext'
 import api from '../services/api'
 import { Search, Plus, X } from 'lucide-react'
 
@@ -29,7 +29,7 @@ export default function Usuarios() {
   const [busqueda, setBusqueda] = useState('')
   const [loading, setLoading] = useState(true)
   const [mostrarForm, setMostrarForm] = useState(false)
-  const [rolUsuarioActual, setRolUsuarioActual] = useState('')
+  const { puedeGestionarUsuarios: puedeGestionar } = useContext(AuthContext)
   const [especialidades, setEspecialidades] = useState<Especialidad[]>([])
   const [sucursales, setSucursales] = useState<Sucursal[]>([])
   const [verDesactivados, setVerDesactivados] = useState(false)
@@ -38,8 +38,6 @@ export default function Usuarios() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    const u = getUser()
-    setRolUsuarioActual(u?.rol || '')
     cargarDatos()
   }, [])
 
@@ -69,8 +67,6 @@ export default function Usuarios() {
     cargarDesactivados()
     cargarDatos()
   }
-
-  const puedeGestionar = ['admin', 'super_admin'].includes(rolUsuarioActual)
 
   const etiquetaRol: Record<string, string> = {
     admin: '👑 Admin',

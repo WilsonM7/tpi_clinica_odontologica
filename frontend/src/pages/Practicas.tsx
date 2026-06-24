@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useContext } from 'react'
 import api from '../services/api'
-import { getUser } from '../lib/auth'
+import { AuthContext } from '../context/AuthContext'
 import { Search, Plus, X, Pencil } from 'lucide-react'
 
 type Practica = {
@@ -31,17 +31,11 @@ export default function Practicas() {
   const [practicaEditando, setPracticaEditando] = useState<Practica | null>(null)
   const [verDesactivadas, setVerDesactivadas] = useState(false)
   const [desactivadas, setDesactivadas] = useState<Practica[]>([])
-  const [rolUsuario, setRolUsuario] = useState('')
+  const { puedeGestionarPracticas: puedeGestionar } = useContext(AuthContext)
 
   useEffect(() => {
     cargarDatos()
-    cargarRol()
   }, [])
-
-  function cargarRol() {
-    const u = getUser()
-    setRolUsuario(u?.rol || '')
-  }
 
   async function cargarDatos() {
     setLoading(true)
@@ -67,8 +61,6 @@ export default function Practicas() {
     cargarDesactivadas()
     cargarDatos()
   }
-
-  const puedeGestionar = ['super_admin', 'jefe_clinica'].includes(rolUsuario)
 
   const practicasFiltradas = practicas.filter(p =>
     p.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
