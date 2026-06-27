@@ -12,11 +12,17 @@ const turnosRoutes = require('./turnos.routes')
 const ordenLlegadaRoutes = require('./orden-llegada.routes')
 const catalogosRoutes = require('./catalogos.routes')
 const horariosRoutes = require('./horarios.routes')
+const { requireAuth } = require('../middleware/auth.middleware')
 
 const router = Router()
 
+// Rutas públicas (no requieren token)
 router.use('/auth', authRoutes)
 router.use('/health', healthRoutes)
+
+// Todas las rutas siguientes requieren JWT válido
+router.use(requireAuth)
+
 router.use('/practicas', practicasRoutes)
 router.use('/especialidades', especialidadesRoutes)
 router.use('/pacientes', pacientesRoutes)
