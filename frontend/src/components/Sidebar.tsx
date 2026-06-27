@@ -22,7 +22,6 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   function handleLogout() {
     logout()
     navigate('/')
-    window.location.reload()
   }
 
   return (
