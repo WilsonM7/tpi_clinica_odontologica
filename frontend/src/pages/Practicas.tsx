@@ -129,7 +129,11 @@ export default function Practicas() {
               <tr><td colSpan={7} className="text-center py-8 text-gray-400">No hay prácticas</td></tr>
             ) : (
               practicasFiltradas.map(p => (
-                <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50">
+                <tr
+                  key={p.id}
+                  className={`border-b border-gray-100 transition-colors ${puedeGestionar ? 'cursor-pointer hover:bg-blue-50' : 'hover:bg-gray-50'}`}
+                  onClick={() => { if (puedeGestionar) { setPracticaEditando(p); setMostrarForm(true) } }}
+                >
                   <td className="px-4 py-3 text-gray-500 font-mono text-xs">{p.codigo}</td>
                   <td className="px-4 py-3 font-medium text-gray-800">{p.nombre}</td>
                   <td className="px-4 py-3 text-gray-600">{p.especialidad?.nombre || '-'}</td>
@@ -153,15 +157,9 @@ export default function Practicas() {
                       <span className="text-gray-400 text-xs">No</span>
                     )}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 text-right">
                     {puedeGestionar && (
-                      <button
-                        onClick={() => { setPracticaEditando(p); setMostrarForm(true) }}
-                        className="text-gray-400 hover:text-blue-600 transition-colors"
-                        title="Editar"
-                      >
-                        <Pencil size={15} />
-                      </button>
+                      <Pencil size={15} className="text-gray-300 inline-block" />
                     )}
                   </td>
                 </tr>
@@ -236,6 +234,7 @@ function FormularioPractica({ practica, especialidades, onClose, onGuardado }: {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [confirmarDesactivar, setConfirmarDesactivar] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -397,7 +396,7 @@ function FormularioPractica({ practica, especialidades, onClose, onGuardado }: {
             {esEdicion && (
               <button
                 type="button"
-                onClick={desactivar}
+                onClick={() => setConfirmarDesactivar(true)}
                 className="border border-orange-300 text-orange-600 rounded-lg py-2 px-3 text-sm hover:bg-orange-50"
               >
                 Desactivar
@@ -418,6 +417,28 @@ function FormularioPractica({ practica, especialidades, onClose, onGuardado }: {
               {loading ? 'Guardando...' : esEdicion ? 'Guardar cambios' : 'Guardar'}
             </button>
           </div>
+
+          {confirmarDesactivar && (
+            <div className="mt-3 p-3 bg-orange-50 rounded-lg border border-orange-200">
+              <p className="text-sm text-orange-700 mb-2">¿Seguro que querés desactivar esta práctica?</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmarDesactivar(false)}
+                  className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-1.5 text-sm hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={desactivar}
+                  className="flex-1 bg-orange-500 text-white rounded-lg py-1.5 text-sm hover:bg-orange-600"
+                >
+                  Sí, desactivar
+                </button>
+              </div>
+            </div>
+          )}
         </form>
       </div>
     </div>

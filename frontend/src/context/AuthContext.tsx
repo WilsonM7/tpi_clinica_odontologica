@@ -30,8 +30,8 @@ export function AuthProvider({ user, children }: { user: User | null; children: 
     user,
     rol,
     puedeGestionarUsuarios: ['admin', 'super_admin'].includes(rol),
-    puedeGestionarPracticas: ['super_admin', 'jefe_clinica'].includes(rol),
-    puedeDesactivarPaciente: ['super_admin', 'jefe_clinica'].includes(rol),
+    puedeGestionarPracticas: ['super_admin', 'jefe_clinica','admin'].includes(rol),
+    puedeDesactivarPaciente: ['admin','super_admin', 'jefe_clinica'].includes(rol),
     puedeEliminarPaciente: rol === 'super_admin',
     puedeAgendar: ['super_admin', 'jefe_clinica', 'secretaria', 'telemarketer', 'supervisora', 'admin'].includes(rol),
   }
