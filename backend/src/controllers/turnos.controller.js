@@ -217,8 +217,8 @@ async function eliminar(req, res, next) {
   try {
     const turno = await Turno.findByPk(req.params.id)
     if (!turno) return res.status(404).json({ message: 'Turno no encontrado' })
-    await turno.update({ estado: 'cancelado' })
-    res.json({ message: 'Turno cancelado' })
+    await turno.destroy()
+    res.json({ message: 'Turno eliminado' })
   } catch (err) {
     next(err)
   }

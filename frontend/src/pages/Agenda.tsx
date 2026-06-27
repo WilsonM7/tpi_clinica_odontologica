@@ -3,7 +3,7 @@ import api from '../services/api'
 import { AuthContext } from '../context/AuthContext'
 import {
   ChevronLeft, ChevronRight, Search, SlidersHorizontal, X,
-  BanIcon, MessageCircle, UserRound, PanelRightClose, PanelRightOpen
+  BanIcon, MessageCircle, UserRound, PanelRightClose, PanelRightOpen, Trash2
 } from 'lucide-react'
 import {
   format, addDays, addWeeks, addMonths,
@@ -59,22 +59,22 @@ const DIAS_NOMBRE_LARGO: Record<number, string> = {
 }
 
 const ESTADOS = [
-  { value: 'ofrecido', label: 'Ofrecido', clase: 'bg-yellow-100 border-yellow-400 text-yellow-800' },
-  { value: 'agendado', label: 'Agendado', clase: 'bg-green-100 border-green-400 text-green-800' },
-  { value: 'confirmado', label: 'Confirmado', clase: 'bg-green-100 border-green-400 text-green-800' },
-  { value: 'atendido', label: 'Atendido', clase: 'bg-green-200 border-green-600 text-green-900' },
-  { value: 'ausente', label: 'Ausente', clase: 'bg-red-100 border-red-400 text-red-700' },
+  { value: 'ofrecido',     label: 'Ofrecido',     clase: 'bg-yellow-100 border-yellow-400 text-yellow-800' },
+  { value: 'agendado',     label: 'Agendado',     clase: 'bg-green-100 border-green-400 text-green-800' },
+  { value: 'confirmado',   label: 'Confirmado',   clase: 'bg-green-100 border-green-400 text-green-800' },
+  { value: 'atendido',     label: 'Atendido',     clase: 'bg-green-200 border-green-600 text-green-900' },
+  { value: 'ausente',      label: 'Ausente',      clase: 'bg-red-100 border-red-400 text-red-700' },
   { value: 'reprogramado', label: 'Reprogramado', clase: 'bg-red-50 border-red-300 text-red-500' },
-  { value: 'pendiente', label: 'Pendiente', clase: 'bg-blue-100 border-blue-400 text-blue-800' },
-  { value: 'cancelado', label: 'Cancelado', clase: 'bg-gray-100 border-gray-300 text-gray-500' },
+  { value: 'pendiente',    label: 'Pendiente',    clase: 'bg-blue-100 border-blue-400 text-blue-800' },
+  { value: 'cancelado',    label: 'Cancelado',    clase: 'bg-gray-100 border-gray-300 text-gray-500' },
 ]
 
 const RADIO_ESTADOS = [
-  { value: 'realizada', label: 'Realizada', clase: 'bg-green-100 text-green-700', dot: 'bg-green-500' },
-  { value: 'traer', label: 'Traer', clase: 'bg-yellow-100 text-yellow-700', dot: 'bg-yellow-500' },
-  { value: 'no_realizada', label: 'No realizada', clase: 'bg-red-100 text-red-700', dot: 'bg-red-500' },
-  { value: 'pedir', label: 'Pedir', clase: 'bg-emerald-100 text-emerald-800', dot: 'bg-emerald-700' },
-  { value: 'pedir_ambas', label: 'Pedir ambas', clase: 'bg-emerald-100 text-emerald-800', dot: 'bg-emerald-700' },
+  { value: 'realizada',    label: 'Realizada',    clase: 'bg-green-100 text-green-700',    dot: 'bg-green-500' },
+  { value: 'traer',        label: 'Traer',        clase: 'bg-yellow-100 text-yellow-700',  dot: 'bg-yellow-500' },
+  { value: 'no_realizada', label: 'No realizada', clase: 'bg-red-100 text-red-700',        dot: 'bg-red-500' },
+  { value: 'pedir',        label: 'Pedir',        clase: 'bg-emerald-100 text-emerald-800', dot: 'bg-emerald-700' },
+  { value: 'pedir_ambas',  label: 'Pedir ambas',  clase: 'bg-emerald-100 text-emerald-800', dot: 'bg-emerald-700' },
 ]
 
 function normHora(h: string): string { return h ? h.substring(0, 5) : '' }
@@ -85,11 +85,15 @@ function radioDot(estado: string | null) {
   if (!estado) return null
   return RADIO_ESTADOS.find(r => r.value === estado)?.dot || null
 }
-function toLocalAR(fechaISO: string): Date {
-  return new Date(fechaISO)
-}
-function franjaHoraria(hora: string): 'mañana' | 'tarde' {
-  return parseInt(hora.split(':')[0]) < 14 ? 'mañana' : 'tarde'
+function toLocalAR(fechaISO: string): Date { return new Date(fechaISO) }
+
+function Spinner() {
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 z-30">
+      <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-3" />
+      <p className="text-sm text-gray-500 font-medium">Cargando agenda...</p>
+    </div>
+  )
 }
 
 function ColumnaHoras() {
@@ -130,14 +134,20 @@ export default function Agenda() {
   const [fechaHoraSeleccionada, setFechaHoraSeleccionada] = useState<Date | null>(null)
   const [consultorioPreseleccionado, setConsultorioPreseleccionado] = useState<string>('')
   const [miniCalAbierto, setMiniCalAbierto] = useState(true)
+  const [cargando, setCargando] = useState(false)
+  const [horaActual, setHoraActual] = useState(new Date())
   const { puedeAgendar: puedeModificar } = useContext(AuthContext)
   const [horariosProf, setHorariosProf] = useState<HorarioProfesional[]>([])
   const [ausencias, setAusencias] = useState<AusenciaProfesional[]>([])
   const [diasInhabilitados, setDiasInhabilitados] = useState<DiaInhabilitado[]>([])
 
+  // Actualizar hora actual cada minuto para la línea
   useEffect(() => {
-    cargarDatos()
+    const iv = setInterval(() => setHoraActual(new Date()), 60000)
+    return () => clearInterval(iv)
   }, [])
+
+  useEffect(() => { cargarDatos() }, [])
 
   useEffect(() => {
     if (sucursalId) {
@@ -169,7 +179,6 @@ export default function Agenda() {
         api.get<any[]>('/especialidades'),
       ])
       const sucursalesData: Sucursal[] = sucs || []
-      // Transformar profesionales al formato esperado por el componente
       const profsTransformados: Profesional[] = (profs || []).map((p: any) => ({
         ...p,
         usuarios: {
@@ -236,6 +245,7 @@ export default function Agenda() {
   }
 
   async function cargarTurnos() {
+    setCargando(true)
     try {
       const { desde, hasta } = getRango(vista, fechaActual)
       const params: Record<string, string> = {
@@ -260,6 +270,7 @@ export default function Agenda() {
     } catch (err) {
       console.error('Error cargando turnos:', err)
     }
+    setCargando(false)
   }
 
   async function buscarTurnos(q: string) {
@@ -338,6 +349,19 @@ export default function Agenda() {
       return !profesionalAusente(profesionalFiltro, fecha)
     }
     return profesionalesActivosEnFecha(fecha, hora) > 0
+  }
+
+  // Posición en px de la línea de hora actual
+  function posicionHoraActual(): number {
+    const h = horaActual.getHours()
+    const m = horaActual.getMinutes()
+    if (h < 8 || h >= 20) return -1
+    const horaStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
+    const idxBase = HORARIOS.findIndex(hr => hr > horaStr)
+    const idxAnterior = idxBase > 0 ? idxBase - 1 : 0
+    const [hBase, mBase] = HORARIOS[idxAnterior].split(':').map(Number)
+    const minutosDesdeBase = (h - hBase) * 60 + (m - mBase)
+    return idxAnterior * SLOT_H + (minutosDesdeBase / 15) * SLOT_H
   }
 
   function headerDia(fecha: Date, compact = false): React.ReactNode {
@@ -468,8 +492,10 @@ export default function Agenda() {
 
   function VistaDia() {
     const diaInh = diaInhabilitado(fechaActual)
+    const posLinea = posicionHoraActual()
     return (
-      <div className="overflow-auto flex-1">
+      <div className="overflow-auto flex-1 relative">
+        {cargando && <Spinner />}
         <div className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm">
           <div className={`flex ${diaInh ? 'bg-orange-50' : 'bg-white'}`}>
             <div className="w-14 flex-shrink-0 border-r border-gray-200" />
@@ -477,10 +503,17 @@ export default function Agenda() {
               {headerDia(fechaActual)}
             </div>
           </div>
-          </div>
+        </div>
         <div className="flex relative">
           <ColumnaHoras />
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 relative">
+            {/* Línea hora actual */}
+            {isToday(fechaActual) && posLinea >= 0 && (
+              <div className="absolute left-0 right-0 flex items-center z-10 pointer-events-none" style={{ top: `${posLinea}px` }}>
+                <div className="w-2 h-2 rounded-full bg-red-500 -ml-1 flex-shrink-0" />
+                <div className="flex-1 h-0.5 bg-red-500" />
+              </div>
+            )}
             <FilasCeldas fecha={fechaActual} />
           </div>
         </div>
@@ -489,8 +522,10 @@ export default function Agenda() {
   }
 
   function VistaSemana() {
+    const posLinea = posicionHoraActual()
     return (
-      <div className="overflow-auto flex-1">
+      <div className="overflow-auto flex-1 relative">
+        {cargando && <Spinner />}
         <div className="flex sticky top-0 z-20 bg-white border-b border-gray-200">
           <div className="w-14 flex-shrink-0 border-r border-gray-200" />
           {diasSemana.map(dia => {
@@ -506,11 +541,21 @@ export default function Agenda() {
         </div>
         <div className="flex relative">
           <ColumnaHoras />
-          {diasSemana.map(dia => (
-            <div key={dia.toISOString()} className="flex-1 border-r border-gray-200 last:border-r-0 relative" style={{ minWidth: 0 }}>
-              <FilasCeldas fecha={dia} />
-            </div>
-          ))}
+          {diasSemana.map(dia => {
+            const esHoy = isToday(dia)
+            return (
+              <div key={dia.toISOString()} className="flex-1 border-r border-gray-200 last:border-r-0 relative" style={{ minWidth: 0 }}>
+                {/* Línea hora actual en columna de hoy */}
+                {esHoy && posLinea >= 0 && (
+                  <div className="absolute left-0 right-0 flex items-center z-10 pointer-events-none" style={{ top: `${posLinea}px` }}>
+                    <div className="w-2 h-2 rounded-full bg-red-500 -ml-1 flex-shrink-0" />
+                    <div className="flex-1 h-0.5 bg-red-500" />
+                  </div>
+                )}
+                <FilasCeldas fecha={dia} />
+              </div>
+            )
+          })}
         </div>
       </div>
     )
@@ -551,8 +596,7 @@ export default function Agenda() {
         </select>
         <button onClick={() => setMiniCalAbierto(!miniCalAbierto)}
           className={`p-1.5 hover:bg-gray-100 rounded-lg flex-shrink-0 ${miniCalAbierto ? 'bg-blue-50' : ''}`}
-          title={miniCalAbierto ? 'Ocultar calendario lateral' : 'Mostrar calendario lateral'}
-          aria-label={miniCalAbierto ? 'Ocultar calendario lateral' : 'Mostrar calendario lateral'}>
+          title={miniCalAbierto ? 'Ocultar calendario lateral' : 'Mostrar calendario lateral'}>
           {miniCalAbierto
             ? <PanelRightClose size={18} className="text-blue-600" />
             : <PanelRightOpen size={18} className="text-gray-500" />}
@@ -653,12 +697,16 @@ export default function Agenda() {
           onGuardado={() => { setMostrarFormTurno(false); cargarTurnos() }} />
       )}
       {turnoSeleccionado && (
-        <DetalleTurno turno={turnoSeleccionado} puedeModificar={puedeModificar}
+        <DetalleTurno
+          turno={turnoSeleccionado}
+          puedeModificar={puedeModificar}
+          consultorios={consultorios}
           onClose={() => setTurnoSeleccionado(null)}
           onActualizado={() => { setTurnoSeleccionado(null); cargarTurnos() }} />
       )}
       {mostrarBajaDia && (
-        <ModalBajaDia sucursales={sucursales}
+        <ModalBajaDia
+          sucursales={sucursales}
           onClose={() => setMostrarBajaDia(false)}
           onGuardado={() => { setMostrarBajaDia(false); cargarDiasInhabilitados() }} />
       )}
@@ -707,6 +755,19 @@ function ModalBajaDia({ sucursales, onClose, onGuardado }: {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [historial, setHistorial] = useState<DiaInhabilitado[]>([])
+  const [confirmarEliminar, setConfirmarEliminar] = useState<string | null>(null)
+
+  useEffect(() => { cargarHistorial() }, [])
+
+  async function cargarHistorial() {
+    try {
+      const data = await api.get<DiaInhabilitado[]>('/dias-inhabilitados?limit=50&orden=desc')
+      setHistorial(data || [])
+    } catch {
+      setHistorial([])
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -718,26 +779,53 @@ function ModalBajaDia({ sucursales, onClose, onGuardado }: {
         sucursal_id: form.sucursal_id || null,
         motivo: form.motivo,
       })
-      setLoading(false)
+      setForm(f => ({ ...f, motivo: '' }))
+      await cargarHistorial()
       onGuardado()
     } catch (err: any) {
       setError(err.message || 'Error al guardar')
-      setLoading(false)
     }
+    setLoading(false)
+  }
+
+  async function eliminarBaja(id: string) {
+    try {
+      await api.delete(`/dias-inhabilitados/${id}`)
+      setConfirmarEliminar(null)
+      await cargarHistorial()
+      onGuardado()
+    } catch {
+      // silencioso
+    }
+  }
+
+  function nombreSucursal(sucId: string | null) {
+    if (!sucId) return 'Todas'
+    return sucursales.find(s => s.id === sucId)?.nombre || sucId
   }
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
-        <div className="flex justify-between items-center mb-3">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold text-gray-800">Baja del día</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
-            <input type="date" value={form.fecha} onChange={e => setForm({ ...form, fecha: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+
+        <form onSubmit={handleSubmit} className="space-y-3 mb-6">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
+              <input type="date" value={form.fecha} onChange={e => setForm({ ...form, fecha: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Sucursal</label>
+              <select value={form.sucursal_id} onChange={e => setForm({ ...form, sucursal_id: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                {sucursales.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+              </select>
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Motivo</label>
@@ -746,7 +834,7 @@ function ModalBajaDia({ sucursales, onClose, onGuardado }: {
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           {error && <p className="text-red-500 text-sm">{error}</p>}
-          <div className="flex gap-2 pt-2">
+          <div className="flex gap-2">
             <button type="button" onClick={onClose}
               className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2 text-sm hover:bg-gray-50">Cancelar</button>
             <button type="submit" disabled={loading}
@@ -755,6 +843,46 @@ function ModalBajaDia({ sucursales, onClose, onGuardado }: {
             </button>
           </div>
         </form>
+
+        {/* Historial */}
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Días inhabilitados</h3>
+          {historial.length === 0
+            ? <p className="text-xs text-gray-400">No hay días inhabilitados registrados</p>
+            : (
+              <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                {historial.map(d => (
+                  <div key={d.id} className="flex items-center justify-between py-2 px-3 bg-orange-50 rounded-lg border border-orange-100">
+                    <div>
+                      <span className="text-sm font-medium text-gray-800">{d.fecha}</span>
+                      <span className="text-xs text-gray-500 ml-2">{nombreSucursal(d.sucursal_id)}</span>
+                      {d.motivo && <p className="text-xs text-gray-500 mt-0.5">{d.motivo}</p>}
+                    </div>
+                    <button onClick={() => setConfirmarEliminar(d.id)}
+                      className="text-red-400 hover:text-red-600 p-1 flex-shrink-0">
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+        </div>
+
+        {/* Confirmación eliminar */}
+        {confirmarEliminar && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-60">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+              <h2 className="text-lg font-semibold text-gray-800 mb-2">¿Eliminar baja del día?</h2>
+              <p className="text-gray-500 text-sm mb-6">El día vuelve a estar habilitado en la agenda.</p>
+              <div className="flex gap-2">
+                <button onClick={() => setConfirmarEliminar(null)}
+                  className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2 text-sm hover:bg-gray-50">Cancelar</button>
+                <button onClick={() => eliminarBaja(confirmarEliminar)}
+                  className="flex-1 bg-red-500 text-white rounded-lg py-2 text-sm hover:bg-red-600">Sí, eliminar</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -802,7 +930,6 @@ function FormularioTurno({ fechaHora, sucursalId, consultorioPreseleccionado, ho
       api.get<any[]>('/profesionales?activo=true'),
       api.get<any[]>('/practicas?activa=true'),
     ]).then(([profsRaw, pracs]) => {
-      // Transformar profesionales al formato con usuarios.nombre
       let profsFiltrados = (profsRaw || []).map((p: any) => ({
         ...p,
         usuarios: {
@@ -866,15 +993,10 @@ function FormularioTurno({ fechaHora, sucursalId, consultorioPreseleccionado, ho
 
   function handleProfesionalChange(profesionalId: string) {
     setForm(f => ({ ...f, profesional_id: profesionalId, practica_id: '' }))
-    if (!profesionalId) {
-      setPracticasFiltradas(todasLasPracticas)
-      return
-    }
-    // Usar especialidades del profesional ya cargado (incluidas en el response de /profesionales)
+    if (!profesionalId) { setPracticasFiltradas(todasLasPracticas); return }
     const prof = profesionales.find((p: any) => p.id === profesionalId)
     if (!prof || !prof.especialidades || prof.especialidades.length === 0) {
-      setPracticasFiltradas(todasLasPracticas)
-      return
+      setPracticasFiltradas(todasLasPracticas); return
     }
     const ids = prof.especialidades.map((e: any) => e.especialidad_id)
     setPracticasFiltradas(
@@ -933,76 +1055,6 @@ function FormularioTurno({ fechaHora, sucursalId, consultorioPreseleccionado, ho
     return null
   }
 
-  async function validarConsultorioLibreParaProfesional(): Promise<string | null> {
-    if (!form.consultorio_id || !form.profesional_id || !form.fecha_hora) return null
-    const dt = new Date(form.fecha_hora)
-    const fechaStr = format(dt, 'yyyy-MM-dd')
-    const hora = `${dt.getHours().toString().padStart(2, '0')}:${dt.getMinutes().toString().padStart(2, '0')}`
-    const franja = franjaHoraria(hora)
-
-    const turnosConsultorio = await api.get<any[]>(
-      `/turnos?consultorio_id=${form.consultorio_id}&fecha=${fechaStr}`
-    )
-    if (!turnosConsultorio || turnosConsultorio.length === 0) return null
-
-    const turnosEnFranja = turnosConsultorio.filter((t: any) => {
-      const horaLocal = toLocalAR(t.fecha_hora)
-      const horaStr = `${horaLocal.getHours().toString().padStart(2, '0')}:${horaLocal.getMinutes().toString().padStart(2, '0')}`
-      return franjaHoraria(horaStr) === franja &&
-        t.estado !== 'cancelado' && t.estado !== 'reprogramado'
-    })
-    if (turnosEnFranja.length === 0) return null
-
-    const profExistente = turnosEnFranja[0].profesional_id
-    if (profExistente !== form.profesional_id) {
-      const todosLosTurnos = await api.get<any[]>(`/turnos?fecha=${fechaStr}`)
-      const consultoriosOcupados = new Set<string>()
-      ;(todosLosTurnos || []).forEach((t: any) => {
-        const horaLocal = toLocalAR(t.fecha_hora)
-        const horaStr = `${horaLocal.getHours().toString().padStart(2, '0')}:${horaLocal.getMinutes().toString().padStart(2, '0')}`
-        if (franjaHoraria(horaStr) === franja &&
-            t.estado !== 'cancelado' && t.estado !== 'reprogramado') {
-          consultoriosOcupados.add(t.consultorio_id)
-        }
-      })
-      const activos = profesionalesActivosEnFecha(dt, hora)
-      const consultoriosLibres = consultorios
-        .filter((c, idx) => idx < activos && !consultoriosOcupados.has(c.id))
-        .map(c => c.nombre)
-      if (consultoriosLibres.length > 0) {
-        return `Ese consultorio ya está asignado a otro profesional. Consultorio${consultoriosLibres.length > 1 ? 's' : ''} libre${consultoriosLibres.length > 1 ? 's' : ''}: ${consultoriosLibres.join(', ')}`
-      }
-      return 'Ese consultorio ya está asignado a otro profesional en esta franja horaria'
-    }
-    return null
-  }
-
-  async function validarConsultorioProfesional(): Promise<string | null> {
-    if (!form.profesional_id || !form.consultorio_id || !form.fecha_hora) return null
-    const dt = new Date(form.fecha_hora)
-    const fechaStr = format(dt, 'yyyy-MM-dd')
-    const hora = `${dt.getHours().toString().padStart(2, '0')}:${dt.getMinutes().toString().padStart(2, '0')}`
-    const franja = franjaHoraria(hora)
-
-    const turnosDia = await api.get<any[]>(
-      `/turnos?profesional_id=${form.profesional_id}&fecha=${fechaStr}`
-    )
-    if (!turnosDia || turnosDia.length === 0) return null
-    const turnosEnFranja = turnosDia.filter((t: any) => {
-      const horaLocal = toLocalAR(t.fecha_hora)
-      const horaStr = `${horaLocal.getHours().toString().padStart(2, '0')}:${horaLocal.getMinutes().toString().padStart(2, '0')}`
-      return franjaHoraria(horaStr) === franja &&
-        t.estado !== 'cancelado' && t.estado !== 'reprogramado'
-    })
-    if (turnosEnFranja.length === 0) return null
-    const consultorioExistente = turnosEnFranja[0].consultorio_id
-    if (consultorioExistente !== form.consultorio_id) {
-      const nombreCon = turnosEnFranja[0].consultorios?.nombre || consultorioExistente
-      return `El profesional atiende en ${nombreCon} en esta franja horaria`
-    }
-    return null
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setLoading(true); setError('')
     if (!form.paciente_id) { setError('Seleccioná un paciente'); setLoading(false); return }
@@ -1017,12 +1069,6 @@ function FormularioTurno({ fechaHora, sucursalId, consultorioPreseleccionado, ho
     if (errorConsultorioHab) { setError(errorConsultorioHab); setLoading(false); return }
 
     try {
-      const errorConsultorioOcupado = await validarConsultorioLibreParaProfesional()
-      if (errorConsultorioOcupado) { setError(errorConsultorioOcupado); setLoading(false); return }
-
-      const errorConsultorio = await validarConsultorioProfesional()
-      if (errorConsultorio) { setError(errorConsultorio); setLoading(false); return }
-
       // Verificar slot exacto disponible
       const [fechaStr, timeStr] = form.fecha_hora.split('T')
       const horaStr = timeStr.substring(0, 5)
@@ -1094,9 +1140,8 @@ function FormularioTurno({ fechaHora, sucursalId, consultorioPreseleccionado, ho
               {profesionales.map((p: any) => <option key={p.id} value={p.id}>{p.usuarios?.nombre}</option>)}
             </select>
             {advertenciaProf && (
-              <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3 text-sm text-yellow-800 flex items-start gap-2">
-                <span>⚠️</span>
-                <span>{advertenciaProf}</span>
+              <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3 text-sm text-yellow-800 flex items-start gap-2 mt-1">
+                <span>⚠️</span><span>{advertenciaProf}</span>
               </div>
             )}
           </div>
@@ -1115,10 +1160,7 @@ function FormularioTurno({ fechaHora, sucursalId, consultorioPreseleccionado, ho
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Práctica
-              {form.profesional_id && <span className="text-xs text-gray-400 ml-1">(filtrada por especialidad)</span>}
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Práctica</label>
             <select value={form.practica_id} onChange={e => setForm(f => ({ ...f, practica_id: e.target.value }))}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="">-- Sin práctica --</option>
@@ -1180,7 +1222,10 @@ function FormularioTurno({ fechaHora, sucursalId, consultorioPreseleccionado, ho
 
 // ── Detalle turno ─────────────────────────────────────────────────────────────
 function DetalleTurno({ turno, puedeModificar, onClose, onActualizado }: {
-  turno: Turno; puedeModificar: boolean; onClose: () => void
+  turno: Turno
+  puedeModificar: boolean
+  consultorios: Consultorio[]
+  onClose: () => void
   onActualizado: () => void
 }) {
   const [practicas, setPracticas] = useState<any[]>([])
@@ -1189,7 +1234,15 @@ function DetalleTurno({ turno, puedeModificar, onClose, onActualizado }: {
   const [practicaId, setPracticaId] = useState(turno.practica_id || '')
   const [radiografia, setRadiografia] = useState(turno.radiografia || '')
   const [guardando, setGuardando] = useState(false)
+  const [eliminando, setEliminando] = useState(false)
   const [confirmarEliminar, setConfirmarEliminar] = useState(false)
+  const [errorEliminar, setErrorEliminar] = useState('')
+  const [advertenciaConflicto, setAdvertenciaConflicto] = useState('')
+
+  // Campos editables de fecha/hora y duración
+  const fechaHoraOriginal = format(toLocalAR(turno.fecha_hora), "yyyy-MM-dd'T'HH:mm")
+  const [fechaHora, setFechaHora] = useState(fechaHoraOriginal)
+  const [duracion, setDuracion] = useState(turno.duracion_minutos || 30)
 
   useEffect(() => {
     api.get<any[]>('/practicas?activa=true')
@@ -1197,17 +1250,70 @@ function DetalleTurno({ turno, puedeModificar, onClose, onActualizado }: {
       .catch(() => setPracticas([]))
   }, [])
 
+  // Validar conflicto en tiempo real al cambiar fecha/hora o duración (chequea solapamiento real)
+  useEffect(() => {
+    if (!puedeModificar) return
+    if (fechaHora === fechaHoraOriginal && duracion === turno.duracion_minutos) {
+      setAdvertenciaConflicto(''); return
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const [fechaStr, timeStr] = fechaHora.split('T')
+        const horaStr = timeStr?.substring(0, 5)
+        if (!fechaStr || !horaStr) return
+
+        // Calcular rango del turno modificado en minutos
+        const [h, m] = horaStr.split(':').map(Number)
+        const inicioMin = h * 60 + m
+        const finMin = inicioMin + duracion
+
+        // Traer todos los turnos del mismo consultorio y fecha
+        const existentes = await api.get<any[]>(
+          `/turnos?consultorio_id=${turno.consultorio_id}&fecha=${fechaStr}`
+        )
+
+        // Detectar solapamiento: cualquier turno cuyo rango se intersecte con el nuevo
+        const conflicto = (existentes || []).find((t: any) => {
+          if (t.id === turno.id) return false
+          if (t.estado === 'cancelado' || t.estado === 'reprogramado') return false
+          const otroInicio = t.fecha_hora ? t.fecha_hora.substring(11, 16) : ''
+          if (!otroInicio) return false
+          const [oh, om] = otroInicio.split(':').map(Number)
+          const otroInicioMin = oh * 60 + om
+          const otroFinMin = otroInicioMin + (t.duracion_minutos || 30)
+          // Solapamiento si los rangos se intersectan
+          return inicioMin < otroFinMin && finMin > otroInicioMin
+        })
+
+        if (conflicto) {
+          const horaConflicto = conflicto.fecha_hora ? conflicto.fecha_hora.substring(11, 16) : ''
+          const pacNombre = conflicto.pacientes?.apellido_nombre || 'otro paciente'
+          setAdvertenciaConflicto(`⚠️ Se superpone con el turno de las ${horaConflicto} (${pacNombre}). No se puede guardar.`)
+        } else {
+          setAdvertenciaConflicto('')
+        }
+      } catch {
+        setAdvertenciaConflicto('')
+      }
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [fechaHora, duracion])
+
   const tel = turno.pacientes?.telefono
   const wappUrl = tel ? `https://wa.me/${tel.replace(/\D/g, '')}` : null
   const radioInfo = RADIO_ESTADOS.find(r => r.value === radiografia)
 
   async function guardar() {
+    if (advertenciaConflicto) return
     setGuardando(true)
     try {
       await api.put(`/turnos/${turno.id}`, {
-        notas, estado,
+        notas,
+        estado,
         practica_id: practicaId || null,
         radiografia: radiografia || null,
+        fecha_hora: fechaHora,
+        duracion_minutos: duracion,
       })
       onActualizado()
     } catch (err) {
@@ -1217,22 +1323,28 @@ function DetalleTurno({ turno, puedeModificar, onClose, onActualizado }: {
   }
 
   async function eliminar() {
+    setEliminando(true)
+    setErrorEliminar('')
     try {
       await api.delete(`/turnos/${turno.id}`)
       onActualizado()
-    } catch (err) {
-      console.error('Error eliminando turno:', err)
+    } catch (err: any) {
+      setErrorEliminar(err.message || 'Error al eliminar el turno')
+      setEliminando(false)
     }
   }
 
+  const duraciones = [15, 30, 45, 60, 75, 90, 105, 120]
+
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold text-gray-800">Detalle del turno</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
         <div className="space-y-3 text-sm">
+          {/* Paciente */}
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xs text-gray-400">Paciente</p>
@@ -1252,14 +1364,36 @@ function DetalleTurno({ turno, puedeModificar, onClose, onActualizado }: {
               </a>
             </div>
           </div>
+
           <div><p className="text-xs text-gray-400">Profesional</p><p className="text-gray-800">{turno.profesionales?.usuarios?.nombre}</p></div>
           <div><p className="text-xs text-gray-400">Consultorio</p><p className="text-gray-800">{turno.consultorios?.nombre}</p></div>
-          <div>
-            <p className="text-xs text-gray-400">Fecha y hora</p>
-            <p className="text-gray-800">{format(toLocalAR(turno.fecha_hora), "dd/MM/yyyy 'a las' HH:mm")}</p>
-          </div>
+
           {puedeModificar ? (
             <>
+              {/* Fecha y hora editable */}
+              <div>
+                <p className="text-xs text-gray-400 mb-1">Fecha y hora</p>
+                <input type="datetime-local" step="900" value={fechaHora}
+                  onChange={e => setFechaHora(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                {advertenciaConflicto && (
+                  <p className="text-xs text-orange-600 mt-1 bg-orange-50 border border-orange-200 rounded p-2">{advertenciaConflicto}</p>
+                )}
+              </div>
+
+              {/* Duración editable */}
+              <div>
+                <p className="text-xs text-gray-400 mb-1">Duración</p>
+                <select value={duracion} onChange={e => setDuracion(Number(e.target.value))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  {duraciones.map(d => (
+                    <option key={d} value={d}>
+                      {d} min{d === 60 ? ' (1h)' : d >= 120 ? ` (${Math.floor(d / 60)}h${d % 60 > 0 ? ` ${d % 60}min` : ''})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <p className="text-xs text-gray-400 mb-1">Práctica</p>
                 <select value={practicaId} onChange={e => setPracticaId(e.target.value)}
@@ -1291,6 +1425,14 @@ function DetalleTurno({ turno, puedeModificar, onClose, onActualizado }: {
             </>
           ) : (
             <>
+              <div>
+                <p className="text-xs text-gray-400">Fecha y hora</p>
+                <p className="text-gray-800">{format(toLocalAR(turno.fecha_hora), "dd/MM/yyyy 'a las' HH:mm")}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">Duración</p>
+                <p className="text-gray-800">{turno.duracion_minutos} min</p>
+              </div>
               {turno.practicas?.nombre && <div><p className="text-xs text-gray-400">Práctica</p><p className="text-gray-800">{turno.practicas.nombre}</p></div>}
               {radiografia && radioInfo && (
                 <div>
@@ -1309,12 +1451,13 @@ function DetalleTurno({ turno, puedeModificar, onClose, onActualizado }: {
             </>
           )}
         </div>
+
         {puedeModificar ? (
           <>
             <div className="flex gap-2 mt-4">
-              <button onClick={() => setConfirmarEliminar(true)}
+              <button onClick={() => { setConfirmarEliminar(true); setErrorEliminar('') }}
                 className="border border-red-300 text-red-500 rounded-lg py-2 px-3 text-sm hover:bg-red-50">Eliminar</button>
-              <button onClick={guardar} disabled={guardando}
+              <button onClick={guardar} disabled={guardando || !!advertenciaConflicto}
                 className="flex-1 bg-blue-600 text-white rounded-lg py-2 text-sm hover:bg-blue-700 disabled:opacity-50">
                 {guardando ? 'Guardando...' : 'Guardar cambios'}
               </button>
@@ -1322,11 +1465,16 @@ function DetalleTurno({ turno, puedeModificar, onClose, onActualizado }: {
             {confirmarEliminar && (
               <div className="mt-3 p-3 bg-red-50 rounded-lg border border-red-200">
                 <p className="text-sm text-red-700 mb-2">¿Seguro que querés eliminar este turno?</p>
+                {errorEliminar && (
+                  <p className="text-xs text-red-600 mb-2 bg-red-100 rounded p-2">{errorEliminar}</p>
+                )}
                 <div className="flex gap-2">
-                  <button onClick={() => setConfirmarEliminar(false)}
+                  <button onClick={() => { setConfirmarEliminar(false); setErrorEliminar('') }}
                     className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-1.5 text-sm hover:bg-gray-50">Cancelar</button>
-                  <button onClick={eliminar}
-                    className="flex-1 bg-red-500 text-white rounded-lg py-1.5 text-sm hover:bg-red-600">Sí, eliminar</button>
+                  <button onClick={eliminar} disabled={eliminando}
+                    className="flex-1 bg-red-500 text-white rounded-lg py-1.5 text-sm hover:bg-red-600 disabled:opacity-50">
+                    {eliminando ? 'Eliminando...' : 'Sí, eliminar'}
+                  </button>
                 </div>
               </div>
             )}
