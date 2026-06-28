@@ -1,0 +1,1488 @@
+import { useEffect, useState, useContext } from 'react'
+import api from '../services/api'
+import { AuthContext } from '../context/AuthContext'
+import {
+  ChevronLeft, ChevronRight, Search, SlidersHorizontal, X,
+  BanIcon, MessageCircle, UserRound, PanelRightClose, PanelRightOpen, Trash2
+} from 'lucide-react'
+import {
+  format, addDays, addWeeks, addMonths,
+  subDays, subWeeks, subMonths,
+  startOfWeek, endOfWeek, startOfMonth, endOfMonth,
+  isSameDay, isSameMonth,
+  isToday, eachDayOfInterval, eachWeekOfInterval,
+} from 'date-fns'
+import { es } from 'date-fns/locale'
+
+type Vista = 'dia' | 'semana'
+
+type Turno = {
+  id: string
+  paciente_id: string
+  profesional_id: string
+  consultorio_id: string
+  sucursal_id: string
+  fecha_hora: string
+  duracion_minutos: number
+  estado: string
+  notas: string
+  practica_id: string | null
+  radiografia: string | null
+  pacientes: { apellido_nombre: string; telefono?: string; id: string }
+  profesionales: { usuario_id: string; id: string; usuarios: { nombre: string } }
+  consultorios: { nombre: string; id: string }
+  practicas?: { nombre: string }
+}
+
+type Profesional = { id: string; usuario_id: string; usuarios: { nombre: string }; especialidades?: any[] }
+type Sucursal = { id: string; nombre: string }
+type Consultorio = { id: string; nombre: string; orden?: number; sucursal_id: string }
+type HorarioProfesional = { profesional_id: string; dia_semana: number; hora_inicio: string; hora_fin: string }
+type AusenciaProfesional = { profesional_id: string; fecha_desde: string; fecha_hasta: string }
+type DiaInhabilitado = { id: string; fecha: string; sucursal_id: string | null; motivo: string }
+type Especialidad = { id: string; nombre: string }
+
+const SLOT_H = 40
+
+const HORARIOS: string[] = []
+for (let h = 8; h < 20; h++) {
+  for (let m = 0; m < 60; m += 15) {
+    if ((h === 13 && m === 45) || (h === 19 && m === 45)) continue
+    HORARIOS.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`)
+  }
+}
+
+const DIAS_SEMANA_LABELS = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB']
+const DIAS_NOMBRE_LARGO: Record<number, string> = {
+  0: 'Domingo', 1: 'Lunes', 2: 'Martes', 3: 'Miércoles',
+  4: 'Jueves', 5: 'Viernes', 6: 'Sábado'
+}
+
+const ESTADOS = [
+  { value: 'ofrecido',     label: 'Ofrecido',     clase: 'bg-yellow-100 border-yellow-400 text-yellow-800' },
+  { value: 'agendado',     label: 'Agendado',     clase: 'bg-green-100 border-green-400 text-green-800' },
+  { value: 'confirmado',   label: 'Confirmado',   clase: 'bg-green-100 border-green-400 text-green-800' },
+  { value: 'atendido',     label: 'Atendido',     clase: 'bg-green-200 border-green-600 text-green-900' },
+  { value: 'ausente',      label: 'Ausente',      clase: 'bg-red-100 border-red-400 text-red-700' },
+  { value: 'reprogramado', label: 'Reprogramado', clase: 'bg-red-50 border-red-300 text-red-500' },
+  { value: 'pendiente',    label: 'Pendiente',    clase: 'bg-blue-100 border-blue-400 text-blue-800' },
+  { value: 'cancelado',    label: 'Cancelado',    clase: 'bg-gray-100 border-gray-300 text-gray-500' },
+]
+
+const RADIO_ESTADOS = [
+  { value: 'realizada',    label: 'Realizada',    clase: 'bg-green-100 text-green-700',    dot: 'bg-green-500' },
+  { value: 'traer',        label: 'Traer',        clase: 'bg-yellow-100 text-yellow-700',  dot: 'bg-yellow-500' },
+  { value: 'no_realizada', label: 'No realizada', clase: 'bg-red-100 text-red-700',        dot: 'bg-red-500' },
+  { value: 'pedir',        label: 'Pedir',        clase: 'bg-emerald-100 text-emerald-800', dot: 'bg-emerald-700' },
+  { value: 'pedir_ambas',  label: 'Pedir ambas',  clase: 'bg-emerald-100 text-emerald-800', dot: 'bg-emerald-700' },
+]
+
+function normHora(h: string): string { return h ? h.substring(0, 5) : '' }
+function claseDeEstado(estado: string) {
+  return ESTADOS.find(e => e.value === estado)?.clase || 'bg-blue-100 border-blue-400 text-blue-800'
+}
+function radioDot(estado: string | null) {
+  if (!estado) return null
+  return RADIO_ESTADOS.find(r => r.value === estado)?.dot || null
+}
+function toLocalAR(fechaISO: string): Date { return new Date(fechaISO) }
+
+function Spinner() {
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 z-30">
+      <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-3" />
+      <p className="text-sm text-gray-500 font-medium">Cargando agenda...</p>
+    </div>
+  )
+}
+
+function ColumnaHoras() {
+  return (
+    <div className="w-14 flex-shrink-0 bg-white border-r border-gray-200">
+      {HORARIOS.map((hora) => (
+        <div key={hora}
+          className="flex items-center justify-end pr-2 border-b border-gray-100"
+          style={{ height: SLOT_H }}>
+          <span className="text-xs text-gray-400 leading-none">{hora}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export default function Agenda() {
+  const [vista, setVista] = useState<Vista>('semana')
+  const [fechaActual, setFechaActual] = useState(new Date())
+  const [turnos, setTurnos] = useState<Turno[]>([])
+  const [profesionales, setProfesionales] = useState<Profesional[]>([])
+  const [especialidades, setEspecialidades] = useState<Especialidad[]>([])
+  const [sucursales, setSucursales] = useState<Sucursal[]>([])
+  const [consultorios, setConsultorios] = useState<Consultorio[]>([])
+  const [sucursalId, setSucursalId] = useState('')
+  const [profesionalFiltro, setProfesionalFiltro] = useState('')
+  const [especialidadFiltro, setEspecialidadFiltro] = useState('')
+  const [estadoFiltro, setEstadoFiltro] = useState('')
+  const [radioFiltro, setRadioFiltro] = useState('')
+  const [soloLibres, setSoloLibres] = useState(false)
+  const [mostrarFiltros, setMostrarFiltros] = useState(false)
+  const [mostrarBusqueda, setMostrarBusqueda] = useState(false)
+  const [busquedaTexto, setBusquedaTexto] = useState('')
+  const [resultadosBusqueda, setResultadosBusqueda] = useState<Turno[]>([])
+  const [mostrarFormTurno, setMostrarFormTurno] = useState(false)
+  const [mostrarBajaDia, setMostrarBajaDia] = useState(false)
+  const [turnoSeleccionado, setTurnoSeleccionado] = useState<Turno | null>(null)
+  const [fechaHoraSeleccionada, setFechaHoraSeleccionada] = useState<Date | null>(null)
+  const [consultorioPreseleccionado, setConsultorioPreseleccionado] = useState<string>('')
+  const [miniCalAbierto, setMiniCalAbierto] = useState(true)
+  const [cargando, setCargando] = useState(false)
+  const [horaActual, setHoraActual] = useState(new Date())
+  const { puedeAgendar: puedeModificar } = useContext(AuthContext)
+  const [horariosProf, setHorariosProf] = useState<HorarioProfesional[]>([])
+  const [ausencias, setAusencias] = useState<AusenciaProfesional[]>([])
+  const [diasInhabilitados, setDiasInhabilitados] = useState<DiaInhabilitado[]>([])
+
+  // Actualizar hora actual cada minuto para la línea
+  useEffect(() => {
+    const iv = setInterval(() => setHoraActual(new Date()), 60000)
+    return () => clearInterval(iv)
+  }, [])
+
+  useEffect(() => { cargarDatos() }, [])
+
+  useEffect(() => {
+    if (sucursalId) {
+      cargarConsultorios()
+      cargarTurnos()
+      cargarHorariosProfesionales()
+      cargarDiasInhabilitados()
+      cargarAusencias()
+    }
+  }, [sucursalId, fechaActual, vista, profesionalFiltro, especialidadFiltro, estadoFiltro, radioFiltro])
+
+  function getRango(v: Vista, fecha: Date): { desde: Date; hasta: Date } {
+    if (v === 'dia') {
+      const desde = new Date(fecha); desde.setHours(0, 0, 0, 0)
+      const hasta = new Date(fecha); hasta.setHours(23, 59, 59, 999)
+      return { desde, hasta }
+    }
+    return {
+      desde: startOfWeek(fecha, { weekStartsOn: 1 }),
+      hasta: endOfWeek(fecha, { weekStartsOn: 1 })
+    }
+  }
+
+  async function cargarDatos() {
+    try {
+      const [sucs, profs, esps] = await Promise.all([
+        api.get<any[]>('/sucursales'),
+        api.get<any[]>('/profesionales'),
+        api.get<any[]>('/especialidades'),
+      ])
+      const sucursalesData: Sucursal[] = sucs || []
+      const profsTransformados: Profesional[] = (profs || []).map((p: any) => ({
+        ...p,
+        usuarios: {
+          nombre: p.usuario
+            ? `${p.usuario.nombre} ${p.usuario.apellido}`
+            : `${p.nombre} ${p.apellido}`,
+        },
+      }))
+      setSucursales(sucursalesData)
+      setProfesionales(profsTransformados)
+      setEspecialidades(esps || [])
+      if (sucursalesData.length > 0) setSucursalId(sucursalesData[0].id)
+    } catch (err) {
+      console.error('Error cargando datos:', err)
+    }
+  }
+
+  async function cargarConsultorios() {
+    try {
+      const data = await api.get<any[]>(`/consultorios${sucursalId ? `?sucursal_id=${sucursalId}` : ''}`)
+      setConsultorios(data || [])
+    } catch (err) {
+      console.error('Error cargando consultorios:', err)
+    }
+  }
+
+  async function cargarHorariosProfesionales() {
+    try {
+      const params = new URLSearchParams()
+      if (sucursalId) params.set('sucursal_id', sucursalId)
+      const data = await api.get<any[]>(`/horarios-profesionales?${params}`)
+      setHorariosProf(data || [])
+    } catch (err) {
+      console.error('Error cargando horarios:', err)
+    }
+  }
+
+  async function cargarAusencias() {
+    try {
+      const { desde, hasta } = getRango(vista, fechaActual)
+      const params = new URLSearchParams({
+        fecha_desde: format(desde, 'yyyy-MM-dd'),
+        fecha_hasta: format(hasta, 'yyyy-MM-dd'),
+      })
+      const data = await api.get<any[]>(`/ausencias-profesionales?${params}`)
+      setAusencias(data || [])
+    } catch (err) {
+      console.error('Error cargando ausencias:', err)
+    }
+  }
+
+  async function cargarDiasInhabilitados() {
+    try {
+      const { desde, hasta } = getRango(vista, fechaActual)
+      const params = new URLSearchParams({
+        desde: format(desde, 'yyyy-MM-dd'),
+        hasta: format(hasta, 'yyyy-MM-dd'),
+      })
+      const data = await api.get<any[]>(`/dias-inhabilitados?${params}`)
+      setDiasInhabilitados(data || [])
+    } catch (err) {
+      console.error('Error cargando días inhabilitados:', err)
+    }
+  }
+
+  async function cargarTurnos() {
+    setCargando(true)
+    try {
+      const { desde, hasta } = getRango(vista, fechaActual)
+      const params: Record<string, string> = {
+        fecha_desde: format(desde, 'yyyy-MM-dd'),
+        fecha_hasta: format(hasta, 'yyyy-MM-dd'),
+      }
+      if (sucursalId) params.sucursal_id = sucursalId
+      if (profesionalFiltro) params.profesional_id = profesionalFiltro
+      if (estadoFiltro) params.estado = estadoFiltro
+      if (radioFiltro) params.radiografia = radioFiltro
+
+      let resultado = await api.get<Turno[]>(`/turnos?${new URLSearchParams(params)}`)
+
+      if (especialidadFiltro) {
+        const profIds = profesionales
+          .filter(p => p.especialidades?.some((e: any) => e.especialidad_id === especialidadFiltro))
+          .map(p => p.id)
+        resultado = resultado.filter(t => profIds.includes(t.profesional_id))
+      }
+
+      setTurnos(resultado || [])
+    } catch (err) {
+      console.error('Error cargando turnos:', err)
+    }
+    setCargando(false)
+  }
+
+  async function buscarTurnos(q: string) {
+    if (q.length < 2) { setResultadosBusqueda([]); return }
+    try {
+      const params: Record<string, string> = { busqueda: q, limit: '50', orden: 'desc' }
+      if (sucursalId) params.sucursal_id = sucursalId
+      const data = await api.get<Turno[]>(`/turnos?${new URLSearchParams(params)}`)
+      setResultadosBusqueda(data || [])
+    } catch {
+      setResultadosBusqueda([])
+    }
+  }
+
+  function navegar(dir: 1 | -1) {
+    if (vista === 'dia') setFechaActual(dir === 1 ? addDays(fechaActual, 1) : subDays(fechaActual, 1))
+    else setFechaActual(dir === 1 ? addWeeks(fechaActual, 1) : subWeeks(fechaActual, 1))
+  }
+
+  function tituloNavegacion() {
+    if (vista === 'dia') return format(fechaActual, "d 'de' MMMM yyyy", { locale: es })
+    const ini = startOfWeek(fechaActual, { weekStartsOn: 1 })
+    const fin = endOfWeek(fechaActual, { weekStartsOn: 1 })
+    return `${format(ini, 'd MMM', { locale: es })} - ${format(fin, 'd MMM yyyy', { locale: es })}`
+  }
+
+  function turnosEnSlotDia(fecha: Date, hora: string) {
+    const [h, m] = hora.split(':').map(Number)
+    return turnos.filter(t => {
+      const ft = toLocalAR(t.fecha_hora)
+      return isSameDay(ft, fecha) && ft.getHours() === h && ft.getMinutes() === m
+    })
+  }
+
+  function diaInhabilitado(fecha: Date): DiaInhabilitado | null {
+    const s = format(fecha, 'yyyy-MM-dd')
+    return diasInhabilitados.find(
+      d => d.fecha === s && (d.sucursal_id === null || d.sucursal_id === sucursalId)
+    ) ?? null
+  }
+
+  function profesionalAusente(profesionalId: string, fecha: Date): boolean {
+    const s = format(fecha, 'yyyy-MM-dd')
+    return ausencias.some(a =>
+      a.profesional_id === profesionalId && a.fecha_desde <= s && a.fecha_hasta >= s
+    )
+  }
+
+  function profesionalesActivosEnFecha(fecha: Date, hora: string): number {
+    if (diaInhabilitado(fecha)) return 0
+    const dia = fecha.getDay()
+    const profIds = new Set(
+      horariosProf
+        .filter(hp =>
+          hp.dia_semana === dia &&
+          hora >= normHora(hp.hora_inicio) &&
+          hora < normHora(hp.hora_fin) &&
+          !profesionalAusente(hp.profesional_id, fecha)
+        )
+        .map(hp => hp.profesional_id)
+    )
+    return profIds.size
+  }
+
+  function celdaDiaHabilitada(fecha: Date, hora: string): boolean {
+    if (diaInhabilitado(fecha)) return false
+    if (profesionalFiltro) {
+      const dia = fecha.getDay()
+      const tieneHorario = horariosProf.some(hp =>
+        hp.profesional_id === profesionalFiltro &&
+        hp.dia_semana === dia &&
+        hora >= normHora(hp.hora_inicio) &&
+        hora < normHora(hp.hora_fin)
+      )
+      if (!tieneHorario) return false
+      return !profesionalAusente(profesionalFiltro, fecha)
+    }
+    return profesionalesActivosEnFecha(fecha, hora) > 0
+  }
+
+  // Posición en px de la línea de hora actual
+  function posicionHoraActual(): number {
+    const h = horaActual.getHours()
+    const m = horaActual.getMinutes()
+    if (h < 8 || h >= 20) return -1
+    const horaStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
+    const idxBase = HORARIOS.findIndex(hr => hr > horaStr)
+    const idxAnterior = idxBase > 0 ? idxBase - 1 : 0
+    const [hBase, mBase] = HORARIOS[idxAnterior].split(':').map(Number)
+    const minutosDesdeBase = (h - hBase) * 60 + (m - mBase)
+    return idxAnterior * SLOT_H + (minutosDesdeBase / 15) * SLOT_H
+  }
+
+  function headerDia(fecha: Date, compact = false): React.ReactNode {
+    const diaInh = diaInhabilitado(fecha)
+    if (compact) {
+      return (
+        <div className="flex flex-col items-center py-1">
+          <span className="text-xs text-gray-500">
+            {DIAS_SEMANA_LABELS[fecha.getDay() === 0 ? 6 : fecha.getDay() - 1]}
+          </span>
+          <span className={`text-sm font-medium ${isToday(fecha) ? 'bg-blue-600 text-white rounded-full w-7 h-7 flex items-center justify-center' : 'text-gray-700'}`}>
+            {format(fecha, 'd')}
+          </span>
+          {diaInh && <span className="text-xs text-orange-500" title={diaInh.motivo}>🚫</span>}
+        </div>
+      )
+    }
+    return (
+      <div className="flex flex-col items-center gap-0.5 py-2">
+        <span className={`text-sm font-semibold ${isToday(fecha) ? 'text-blue-600' : 'text-gray-800'}`}>
+          {DIAS_NOMBRE_LARGO[fecha.getDay()]} {format(fecha, 'dd/MM/yyyy')}
+        </span>
+        {diaInh && <span className="text-xs text-orange-600 font-medium">🚫 {diaInh.motivo}</span>}
+      </div>
+    )
+  }
+
+  const diasSemana = eachDayOfInterval({
+    start: startOfWeek(fechaActual, { weekStartsOn: 1 }),
+    end: endOfWeek(fechaActual, { weekStartsOn: 1 })
+  }).filter(d => d.getDay() !== 0)
+
+  function abrirFormTurno(fecha: Date, hora: string, consultorioId: string) {
+    const [h, m] = hora.split(':').map(Number)
+    const dt = new Date(fecha); dt.setHours(h, m, 0, 0)
+    setFechaHoraSeleccionada(dt)
+    setConsultorioPreseleccionado(consultorioId)
+    setMostrarFormTurno(true)
+  }
+
+  function renderTurno(t: Turno, compact = false, ocultarContenido = false) {
+    const clase = ocultarContenido
+      ? 'bg-red-100 border-red-300'
+      : claseDeEstado(t.estado)
+    const altoSlots = Math.ceil((t.duracion_minutos || 15) / 15)
+
+    if (ocultarContenido) {
+      return (
+        <div key={t.id}
+          className={`absolute inset-x-0.5 top-0 rounded border-l-2 z-10 ${clase}`}
+          style={{ height: `${altoSlots * SLOT_H - 1}px` }}
+        />
+      )
+    }
+
+    const tachado = t.estado === 'reprogramado'
+    const tel = t.pacientes?.telefono
+    const wappUrl = tel ? `https://wa.me/${tel.replace(/\D/g, '')}` : null
+    const dot = radioDot(t.radiografia)
+    return (
+      <div key={t.id}
+        onClick={e => { e.stopPropagation(); setTurnoSeleccionado(t) }}
+        className={`absolute inset-x-0.5 top-0 rounded px-1 text-xs border-l-2 cursor-pointer z-10 overflow-hidden ${clase}`}
+        style={{ height: `${altoSlots * SLOT_H - 1}px` }}>
+        <div className="flex items-start gap-0.5 pt-0.5">
+          {dot && <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-0.5 ${dot}`} title={t.radiografia || ''} />}
+          <div className="flex-1 min-w-0">
+            <p className={`font-medium leading-tight truncate ${tachado ? 'line-through' : ''}`}>
+              {t.pacientes?.apellido_nombre}
+            </p>
+            {(t.practicas?.nombre || t.notas) && (
+              <p className="truncate opacity-75 leading-tight">
+                {t.practicas?.nombre || t.notas}
+              </p>
+            )}
+          </div>
+          {!compact && (
+            <div className="flex gap-0.5 flex-shrink-0">
+              {wappUrl && (
+                <a href={wappUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
+                  <MessageCircle size={9} className="opacity-50 hover:opacity-100" />
+                </a>
+              )}
+              <a href={`/pacientes/${t.pacientes?.id}`} onClick={e => e.stopPropagation()}>
+                <UserRound size={9} className="opacity-50 hover:opacity-100" />
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  function FilasCeldas({ fecha }: { fecha: Date }) {
+    const diaInh = diaInhabilitado(fecha)
+    return (
+      <>
+        {HORARIOS.map(hora => {
+          const ts = turnosEnSlotDia(fecha, hora)
+          const habilitada = celdaDiaHabilitada(fecha, hora)
+          const tieneturno = ts.length > 0
+          const bg = diaInh
+            ? 'bg-orange-50 cursor-not-allowed'
+            : !habilitada
+              ? 'bg-red-50 cursor-not-allowed'
+              : soloLibres && tieneturno
+                ? 'bg-red-100 cursor-not-allowed'
+                : tieneturno
+                  ? ''
+                  : puedeModificar
+                    ? 'cursor-pointer hover:bg-blue-50'
+                    : 'cursor-default'
+          return (
+            <div key={hora}
+              className={`border-b border-gray-100 relative ${bg}`}
+              style={{ height: SLOT_H }}
+              onClick={() => {
+                if (!habilitada || !puedeModificar || diaInh || (soloLibres && tieneturno)) return
+                abrirFormTurno(fecha, hora, consultorios[0]?.id || '')
+              }}>
+              {ts.map(t => renderTurno(t, false, soloLibres))}
+            </div>
+          )
+        })}
+      </>
+    )
+  }
+
+  function VistaDia() {
+    const diaInh = diaInhabilitado(fechaActual)
+    const posLinea = posicionHoraActual()
+    return (
+      <div className="overflow-auto flex-1 relative">
+        {cargando && <Spinner />}
+        <div className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm">
+          <div className={`flex ${diaInh ? 'bg-orange-50' : 'bg-white'}`}>
+            <div className="w-14 flex-shrink-0 border-r border-gray-200" />
+            <div className="flex-1 flex items-center justify-center py-2">
+              {headerDia(fechaActual)}
+            </div>
+          </div>
+        </div>
+        <div className="flex relative">
+          <ColumnaHoras />
+          <div className="flex-1 min-w-0 relative">
+            {/* Línea hora actual */}
+            {isToday(fechaActual) && posLinea >= 0 && (
+              <div className="absolute left-0 right-0 flex items-center z-10 pointer-events-none" style={{ top: `${posLinea}px` }}>
+                <div className="w-2 h-2 rounded-full bg-red-500 -ml-1 flex-shrink-0" />
+                <div className="flex-1 h-0.5 bg-red-500" />
+              </div>
+            )}
+            <FilasCeldas fecha={fechaActual} />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  function VistaSemana() {
+    const posLinea = posicionHoraActual()
+    return (
+      <div className="overflow-auto flex-1 relative">
+        {cargando && <Spinner />}
+        <div className="flex sticky top-0 z-20 bg-white border-b border-gray-200">
+          <div className="w-14 flex-shrink-0 border-r border-gray-200" />
+          {diasSemana.map(dia => {
+            const inh = diaInhabilitado(dia)
+            return (
+              <div key={dia.toISOString()}
+                className={`flex-1 border-r border-gray-200 last:border-r-0 ${inh ? 'bg-orange-50' : 'bg-white'}`}
+                style={{ minWidth: 0 }}>
+                {headerDia(dia, true)}
+              </div>
+            )
+          })}
+        </div>
+        <div className="flex relative">
+          <ColumnaHoras />
+          {diasSemana.map(dia => {
+            const esHoy = isToday(dia)
+            return (
+              <div key={dia.toISOString()} className="flex-1 border-r border-gray-200 last:border-r-0 relative" style={{ minWidth: 0 }}>
+                {/* Línea hora actual en columna de hoy */}
+                {esHoy && posLinea >= 0 && (
+                  <div className="absolute left-0 right-0 flex items-center z-10 pointer-events-none" style={{ top: `${posLinea}px` }}>
+                    <div className="w-2 h-2 rounded-full bg-red-500 -ml-1 flex-shrink-0" />
+                    <div className="flex-1 h-0.5 bg-red-500" />
+                  </div>
+                )}
+                <FilasCeldas fecha={dia} />
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center gap-2 px-4 py-2 bg-white border-b border-gray-200 flex-shrink-0">
+        <button onClick={() => setFechaActual(new Date())}
+          className="px-3 py-1 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 flex-shrink-0">Hoy</button>
+        <button onClick={() => navegar(-1)} className="p-1.5 hover:bg-gray-100 rounded-lg flex-shrink-0"><ChevronLeft size={16} /></button>
+        <button onClick={() => navegar(1)} className="p-1.5 hover:bg-gray-100 rounded-lg flex-shrink-0"><ChevronRight size={16} /></button>
+        <span className="text-sm font-medium text-gray-800 capitalize min-w-44 text-center flex-shrink-0">{tituloNavegacion()}</span>
+        <div className="flex-1" />
+        {sucursales.length > 0 && (
+          <span className="text-xs text-gray-500 border border-gray-200 rounded-lg px-2 py-1 flex-shrink-0">
+            {sucursales[0]?.nombre}
+          </span>
+        )}
+        {puedeModificar && (
+          <button onClick={() => setMostrarBajaDia(true)}
+            className="flex items-center gap-1 px-2 py-1 border border-orange-300 text-orange-600 rounded-lg text-xs hover:bg-orange-50 flex-shrink-0">
+            <BanIcon size={14} /> Baja del día
+          </button>
+        )}
+        <button onClick={() => { setMostrarBusqueda(!mostrarBusqueda); setBusquedaTexto(''); setResultadosBusqueda([]) }}
+          className={`p-1.5 hover:bg-gray-100 rounded-lg ${mostrarBusqueda ? 'bg-blue-50' : ''}`}>
+          <Search size={16} className={mostrarBusqueda ? 'text-blue-600' : 'text-gray-600'} />
+        </button>
+        <button onClick={() => setMostrarFiltros(!mostrarFiltros)}
+          className={`p-1.5 hover:bg-gray-100 rounded-lg ${mostrarFiltros ? 'bg-blue-50' : ''}`}>
+          <SlidersHorizontal size={16} className={mostrarFiltros ? 'text-blue-600' : 'text-gray-600'} />
+        </button>
+        <select value={vista} onChange={e => setVista(e.target.value as Vista)}
+          className="border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none">
+          <option value="dia">Día</option>
+          <option value="semana">Semana</option>
+        </select>
+        <button onClick={() => setMiniCalAbierto(!miniCalAbierto)}
+          className={`p-1.5 hover:bg-gray-100 rounded-lg flex-shrink-0 ${miniCalAbierto ? 'bg-blue-50' : ''}`}
+          title={miniCalAbierto ? 'Ocultar calendario lateral' : 'Mostrar calendario lateral'}>
+          {miniCalAbierto
+            ? <PanelRightClose size={18} className="text-blue-600" />
+            : <PanelRightOpen size={18} className="text-gray-500" />}
+        </button>
+      </div>
+
+      {mostrarBusqueda && (
+        <div className="px-4 py-2 bg-white border-b border-gray-200 flex-shrink-0">
+          <div className="relative max-w-md">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input autoFocus value={busquedaTexto}
+              onChange={e => { setBusquedaTexto(e.target.value); buscarTurnos(e.target.value) }}
+              placeholder="Buscar paciente, práctica o profesional..."
+              className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          {resultadosBusqueda.length > 0 && (
+            <div className="mt-2 border border-gray-200 rounded-lg max-h-60 overflow-y-auto bg-white shadow-lg">
+              {resultadosBusqueda.map(t => (
+                <div key={t.id}
+                  onClick={() => { setTurnoSeleccionado(t); setMostrarBusqueda(false) }}
+                  className="px-3 py-2 text-sm hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0">
+                  <div className="flex justify-between">
+                    <span className="font-medium">{t.pacientes?.apellido_nombre}</span>
+                    <span className="text-xs text-gray-400">{format(toLocalAR(t.fecha_hora), 'dd/MM/yyyy HH:mm')}</span>
+                  </div>
+                  <div className="text-xs text-gray-500 flex gap-2 mt-0.5">
+                    <span>{t.profesionales?.usuarios?.nombre}</span>
+                    {t.practicas?.nombre && <span>· {t.practicas.nombre}</span>}
+                    <span className={`ml-auto px-1.5 rounded-full border ${claseDeEstado(t.estado)}`}>{t.estado}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {busquedaTexto.length >= 2 && resultadosBusqueda.length === 0 && (
+            <p className="text-xs text-gray-400 mt-2">Sin resultados</p>
+          )}
+        </div>
+      )}
+
+      {mostrarFiltros && (
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2 bg-gray-50 border-b border-gray-200 flex-shrink-0">
+          <span className="text-sm text-gray-600 font-medium">Filtrar:</span>
+          <select value={profesionalFiltro} onChange={e => setProfesionalFiltro(e.target.value)}
+            className="border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none">
+            <option value="">Todos los profesionales</option>
+            {profesionales.map(p => <option key={p.id} value={p.id}>{p.usuarios?.nombre}</option>)}
+          </select>
+          <select value={especialidadFiltro} onChange={e => setEspecialidadFiltro(e.target.value)}
+            className="border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none">
+            <option value="">Todas las especialidades</option>
+            {especialidades.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+          </select>
+          <select value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)}
+            className="border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none">
+            <option value="">Todos los estados</option>
+            {ESTADOS.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
+          </select>
+          <select value={radioFiltro} onChange={e => setRadioFiltro(e.target.value)}
+            className="border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none">
+            <option value="">Todas las radiografías</option>
+            {RADIO_ESTADOS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+          </select>
+          <label className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+            <input type="checkbox" checked={soloLibres} onChange={e => setSoloLibres(e.target.checked)}
+              className="rounded border-gray-300 text-blue-600" />
+            Solo libres
+          </label>
+          <button onClick={() => {
+            setProfesionalFiltro(''); setEspecialidadFiltro(''); setEstadoFiltro('')
+            setRadioFiltro(''); setSoloLibres(false); setMostrarFiltros(false)
+          }} className="text-sm text-gray-500 hover:text-gray-700 ml-auto">Limpiar</button>
+        </div>
+      )}
+
+      <div className="flex flex-1 overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {vista === 'dia' && <VistaDia />}
+          {vista === 'semana' && <VistaSemana />}
+        </div>
+        {miniCalAbierto && (
+          <div className="w-44 flex-shrink-0 border-l border-gray-200 bg-white p-3 overflow-y-auto">
+            <MiniCalendario fecha={fechaActual} onSelect={setFechaActual} />
+          </div>
+        )}
+      </div>
+
+      {mostrarFormTurno && (
+        <FormularioTurno
+          fechaHora={fechaHoraSeleccionada}
+          sucursalId={sucursalId}
+          consultorioPreseleccionado={consultorioPreseleccionado}
+          horariosProf={horariosProf}
+          ausencias={ausencias}
+          consultorios={consultorios}
+          profesionalesActivosEnFecha={profesionalesActivosEnFecha}
+          onClose={() => setMostrarFormTurno(false)}
+          onGuardado={() => { setMostrarFormTurno(false); cargarTurnos() }} />
+      )}
+      {turnoSeleccionado && (
+        <DetalleTurno
+          turno={turnoSeleccionado}
+          puedeModificar={puedeModificar}
+          consultorios={consultorios}
+          onClose={() => setTurnoSeleccionado(null)}
+          onActualizado={() => { setTurnoSeleccionado(null); cargarTurnos() }} />
+      )}
+      {mostrarBajaDia && (
+        <ModalBajaDia
+          sucursales={sucursales}
+          onClose={() => setMostrarBajaDia(false)}
+          onGuardado={() => { setMostrarBajaDia(false); cargarDiasInhabilitados() }} />
+      )}
+    </div>
+  )
+}
+
+// ── Mini calendario ───────────────────────────────────────────────────────────
+function MiniCalendario({ fecha, onSelect }: { fecha: Date; onSelect: (d: Date) => void }) {
+  const [mes, setMes] = useState(new Date(fecha))
+  return (
+    <div className="text-xs">
+      <div className="flex items-center justify-between mb-2">
+        <span className="font-medium text-gray-700 capitalize">{format(mes, 'MMMM yyyy', { locale: es })}</span>
+        <div className="flex gap-1">
+          <button onClick={() => setMes(subMonths(mes, 1))} className="p-0.5 hover:bg-gray-100 rounded"><ChevronLeft size={12} /></button>
+          <button onClick={() => setMes(addMonths(mes, 1))} className="p-0.5 hover:bg-gray-100 rounded"><ChevronRight size={12} /></button>
+        </div>
+      </div>
+      <div className="grid grid-cols-7 text-center">
+        {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map(d => <div key={d} className="text-gray-400 pb-1">{d}</div>)}
+        {eachWeekOfInterval({ start: startOfMonth(mes), end: endOfMonth(mes) }, { weekStartsOn: 1 }).map(semana =>
+          eachDayOfInterval({ start: semana, end: addDays(semana, 6) }).map(dia => (
+            <div key={dia.toISOString()} onClick={() => onSelect(dia)}
+              className={`cursor-pointer rounded-full w-5 h-5 flex items-center justify-center mx-auto my-0.5
+                ${isSameDay(dia, fecha) ? 'bg-blue-600 text-white' : ''}
+                ${isToday(dia) && !isSameDay(dia, fecha) ? 'text-blue-600 font-bold' : ''}
+                ${!isSameMonth(dia, mes) ? 'text-gray-300' : 'text-gray-700 hover:bg-gray-100'}`}>
+              {format(dia, 'd')}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Modal Baja del día ────────────────────────────────────────────────────────
+function ModalBajaDia({ sucursales, onClose, onGuardado }: {
+  sucursales: Sucursal[]; onClose: () => void; onGuardado: () => void
+}) {
+  const [form, setForm] = useState({
+    fecha: format(new Date(), 'yyyy-MM-dd'),
+    sucursal_id: sucursales[0]?.id || '',
+    motivo: '',
+  })
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [historial, setHistorial] = useState<DiaInhabilitado[]>([])
+  const [confirmarEliminar, setConfirmarEliminar] = useState<string | null>(null)
+
+  useEffect(() => { cargarHistorial() }, [])
+
+  async function cargarHistorial() {
+    try {
+      const data = await api.get<DiaInhabilitado[]>('/dias-inhabilitados?limit=50&orden=desc')
+      setHistorial(data || [])
+    } catch {
+      setHistorial([])
+    }
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!form.motivo.trim()) { setError('Ingresá un motivo'); return }
+    setLoading(true)
+    try {
+      await api.post('/dias-inhabilitados', {
+        fecha: form.fecha,
+        sucursal_id: form.sucursal_id || null,
+        motivo: form.motivo,
+      })
+      setForm(f => ({ ...f, motivo: '' }))
+      await cargarHistorial()
+      onGuardado()
+    } catch (err: any) {
+      setError(err.message || 'Error al guardar')
+    }
+    setLoading(false)
+  }
+
+  async function eliminarBaja(id: string) {
+    try {
+      await api.delete(`/dias-inhabilitados/${id}`)
+      setConfirmarEliminar(null)
+      await cargarHistorial()
+      onGuardado()
+    } catch {
+      // silencioso
+    }
+  }
+
+  function nombreSucursal(sucId: string | null) {
+    if (!sucId) return 'Todas'
+    return sucursales.find(s => s.id === sucId)?.nombre || sucId
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold text-gray-800">Baja del día</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3 mb-6">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
+              <input type="date" value={form.fecha} onChange={e => setForm({ ...form, fecha: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Sucursal</label>
+              <select value={form.sucursal_id} onChange={e => setForm({ ...form, sucursal_id: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                {sucursales.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Motivo</label>
+            <input value={form.motivo} onChange={e => setForm({ ...form, motivo: e.target.value })}
+              placeholder="Ej: Feriado, Mantenimiento..."
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          {error && <p className="text-red-500 text-sm">{error}</p>}
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose}
+              className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2 text-sm hover:bg-gray-50">Cancelar</button>
+            <button type="submit" disabled={loading}
+              className="flex-1 bg-orange-500 text-white rounded-lg py-2 text-sm hover:bg-orange-600 disabled:opacity-50">
+              {loading ? 'Guardando...' : 'Inhabilitar día'}
+            </button>
+          </div>
+        </form>
+
+        {/* Historial */}
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Días inhabilitados</h3>
+          {historial.length === 0
+            ? <p className="text-xs text-gray-400">No hay días inhabilitados registrados</p>
+            : (
+              <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                {historial.map(d => (
+                  <div key={d.id} className="flex items-center justify-between py-2 px-3 bg-orange-50 rounded-lg border border-orange-100">
+                    <div>
+                      <span className="text-sm font-medium text-gray-800">{d.fecha}</span>
+                      <span className="text-xs text-gray-500 ml-2">{nombreSucursal(d.sucursal_id)}</span>
+                      {d.motivo && <p className="text-xs text-gray-500 mt-0.5">{d.motivo}</p>}
+                    </div>
+                    <button onClick={() => setConfirmarEliminar(d.id)}
+                      className="text-red-400 hover:text-red-600 p-1 flex-shrink-0">
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+        </div>
+
+        {/* Confirmación eliminar */}
+        {confirmarEliminar && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-60">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+              <h2 className="text-lg font-semibold text-gray-800 mb-2">¿Eliminar baja del día?</h2>
+              <p className="text-gray-500 text-sm mb-6">El día vuelve a estar habilitado en la agenda.</p>
+              <div className="flex gap-2">
+                <button onClick={() => setConfirmarEliminar(null)}
+                  className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2 text-sm hover:bg-gray-50">Cancelar</button>
+                <button onClick={() => eliminarBaja(confirmarEliminar)}
+                  className="flex-1 bg-red-500 text-white rounded-lg py-2 text-sm hover:bg-red-600">Sí, eliminar</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Formulario nuevo turno ────────────────────────────────────────────────────
+function FormularioTurno({ fechaHora, sucursalId, consultorioPreseleccionado, horariosProf, ausencias, consultorios, profesionalesActivosEnFecha, onClose, onGuardado }: {
+  fechaHora: Date | null
+  sucursalId: string
+  consultorioPreseleccionado?: string
+  horariosProf: HorarioProfesional[]
+  ausencias: AusenciaProfesional[]
+  consultorios: Consultorio[]
+  profesionalesActivosEnFecha: (fecha: Date, hora: string) => number
+  onClose: () => void
+  onGuardado: () => void
+}) {
+  const [pacientes, setPacientes] = useState<any[]>([])
+  const [profesionales, setProfesionales] = useState<any[]>([])
+  const [todasLasPracticas, setTodasLasPracticas] = useState<any[]>([])
+  const CONTROL_AGENDA_ID = '__control__'
+  const [tratamientosPaciente, setTratamientosPaciente] = useState<any[]>([])
+  const [advertenciaProf, setAdvertenciaProf] = useState('')
+  const [practicasFiltradas, setPracticasFiltradas] = useState<any[]>([])
+  const [busquedaPaciente, setBusquedaPaciente] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [form, setForm] = useState({
+    paciente_id: '', profesional_id: '',
+    consultorio_id: consultorioPreseleccionado || '',
+    practica_id: '', radiografia: '',
+    fecha_hora: fechaHora ? format(fechaHora, "yyyy-MM-dd'T'HH:mm") : '',
+    duracion_minutos: 30, notas: '', estado: 'agendado'
+  })
+
+  useEffect(() => {
+    const dt = fechaHora
+    const diaSemana = dt ? dt.getDay() : -1
+    const hora = dt
+      ? `${dt.getHours().toString().padStart(2, '0')}:${dt.getMinutes().toString().padStart(2, '0')}`
+      : ''
+    const fechaStr = dt ? format(dt, 'yyyy-MM-dd') : ''
+
+    Promise.all([
+      api.get<any[]>('/profesionales?activo=true'),
+      api.get<any[]>('/practicas?activa=true'),
+    ]).then(([profsRaw, pracs]) => {
+      let profsFiltrados = (profsRaw || []).map((p: any) => ({
+        ...p,
+        usuarios: {
+          nombre: p.usuario
+            ? `${p.usuario.nombre} ${p.usuario.apellido}`
+            : `${p.nombre} ${p.apellido}`,
+        },
+      }))
+
+      if (dt && diaSemana >= 0 && hora) {
+        const profsConHorario = new Set(
+          horariosProf
+            .filter(hp =>
+              hp.dia_semana === diaSemana &&
+              hora >= normHora(hp.hora_inicio) &&
+              hora < normHora(hp.hora_fin)
+            )
+            .map(hp => hp.profesional_id)
+        )
+        profsFiltrados = profsFiltrados.filter((p: any) =>
+          profsConHorario.has(p.id) &&
+          !ausencias.some(a =>
+            a.profesional_id === p.id &&
+            a.fecha_desde <= fechaStr &&
+            a.fecha_hasta >= fechaStr
+          )
+        )
+      }
+
+      setProfesionales(profsFiltrados)
+      setTodasLasPracticas(pracs || [])
+      setPracticasFiltradas(pracs || [])
+    }).catch(console.error)
+  }, [])
+
+  useEffect(() => {
+    if (!form.paciente_id) { setTratamientosPaciente([]); setAdvertenciaProf(''); return }
+    api.get<any[]>(`/tratamientos?paciente_id=${form.paciente_id}`)
+      .then(data => {
+        const activos = (data || []).filter((t: any) =>
+          t.estado !== 'realizado' && t.estado !== 'cancelado'
+        )
+        setTratamientosPaciente(activos)
+      })
+      .catch(() => setTratamientosPaciente([]))
+  }, [form.paciente_id])
+
+  useEffect(() => {
+    if (form.practica_id !== CONTROL_AGENDA_ID || !form.profesional_id || tratamientosPaciente.length === 0) {
+      setAdvertenciaProf(''); return
+    }
+    const tto = tratamientosPaciente[0]
+    if (tto && tto.profesional_id !== form.profesional_id) {
+      const prof = tto.profesional
+      const nombre = prof ? `${prof.nombre} ${prof.apellido}` : 'otro profesional'
+      setAdvertenciaProf(`Este paciente sigue su tratamiento con ${nombre}. ¿Desea agendarlo de todas formas?`)
+    } else {
+      setAdvertenciaProf('')
+    }
+  }, [form.practica_id, form.profesional_id, tratamientosPaciente])
+
+  function handleProfesionalChange(profesionalId: string) {
+    setForm(f => ({ ...f, profesional_id: profesionalId, practica_id: '' }))
+    if (!profesionalId) { setPracticasFiltradas(todasLasPracticas); return }
+    const prof = profesionales.find((p: any) => p.id === profesionalId)
+    if (!prof || !prof.especialidades || prof.especialidades.length === 0) {
+      setPracticasFiltradas(todasLasPracticas); return
+    }
+    const ids = prof.especialidades.map((e: any) => e.especialidad_id)
+    setPracticasFiltradas(
+      todasLasPracticas.filter((p: any) => !p.especialidad_id || ids.includes(p.especialidad_id))
+    )
+  }
+
+  async function buscarPacientes(q: string) {
+    if (q.length < 2) { setPacientes([]); return }
+    try {
+      const data = await api.get<any[]>(
+        `/pacientes?busqueda=${encodeURIComponent(q)}&activo=true&limit=10`
+      )
+      const transformados = (data || []).map((p: any) => ({
+        ...p,
+        apellido_nombre: `${p.apellido}, ${p.nombre}`,
+      }))
+      setPacientes(transformados)
+    } catch {
+      setPacientes([])
+    }
+  }
+
+  function validarHorarioProfesional(): string | null {
+    if (!form.profesional_id || !form.fecha_hora) return null
+    const dt = new Date(form.fecha_hora)
+    const diaSemana = dt.getDay()
+    const hora = `${dt.getHours().toString().padStart(2, '0')}:${dt.getMinutes().toString().padStart(2, '0')}`
+    const fechaStr = format(dt, 'yyyy-MM-dd')
+    const ausente = ausencias.some(a =>
+      a.profesional_id === form.profesional_id &&
+      a.fecha_desde <= fechaStr && a.fecha_hasta >= fechaStr
+    )
+    if (ausente) return 'El profesional tiene una ausencia registrada para esa fecha'
+    const tieneHorario = horariosProf.some(hp =>
+      hp.profesional_id === form.profesional_id &&
+      hp.dia_semana === diaSemana &&
+      hora >= normHora(hp.hora_inicio) &&
+      hora < normHora(hp.hora_fin)
+    )
+    if (!tieneHorario) return 'El profesional no tiene horario asignado para ese día y hora'
+    return null
+  }
+
+  function validarConsultorioHabilitado(): string | null {
+    if (!form.consultorio_id || !form.fecha_hora) return null
+    const dt = new Date(form.fecha_hora)
+    const hora = `${dt.getHours().toString().padStart(2, '0')}:${dt.getMinutes().toString().padStart(2, '0')}`
+    const activos = profesionalesActivosEnFecha(dt, hora)
+    if (activos === 0) return 'No hay profesionales activos para ese día y hora'
+    const idx = consultorios.findIndex(c => c.id === form.consultorio_id)
+    if (idx >= activos) {
+      const nombresHabilitados = consultorios.slice(0, activos).map(c => c.nombre).join(', ')
+      return `Solo hay ${activos} consultorio${activos > 1 ? 's' : ''} habilitado${activos > 1 ? 's' : ''} para ese horario. Agendá en: ${nombresHabilitados}`
+    }
+    return null
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault(); setLoading(true); setError('')
+    if (!form.paciente_id) { setError('Seleccioná un paciente'); setLoading(false); return }
+    if (!form.profesional_id) { setError('Seleccioná un profesional'); setLoading(false); return }
+    if (!form.consultorio_id) { setError('Seleccioná un consultorio'); setLoading(false); return }
+    if (!form.fecha_hora) { setError('Ingresá fecha y hora'); setLoading(false); return }
+
+    const errorHorario = validarHorarioProfesional()
+    if (errorHorario) { setError(errorHorario); setLoading(false); return }
+
+    const errorConsultorioHab = validarConsultorioHabilitado()
+    if (errorConsultorioHab) { setError(errorConsultorioHab); setLoading(false); return }
+
+    try {
+      // Verificar slot exacto disponible
+      const [fechaStr, timeStr] = form.fecha_hora.split('T')
+      const horaStr = timeStr.substring(0, 5)
+      const existentes = await api.get<any[]>(
+        `/turnos?consultorio_id=${form.consultorio_id}&fecha=${fechaStr}&hora_inicio=${horaStr}`
+      )
+      const hayConflicto = (existentes || []).some((t: any) =>
+        t.estado !== 'cancelado' && t.estado !== 'reprogramado'
+      )
+      if (hayConflicto) {
+        setError('Ya existe un turno en ese consultorio a esa hora')
+        setLoading(false)
+        return
+      }
+
+      await api.post('/turnos', {
+        paciente_id: form.paciente_id,
+        profesional_id: form.profesional_id,
+        consultorio_id: form.consultorio_id,
+        sucursal_id: sucursalId,
+        practica_id: (form.practica_id && form.practica_id !== CONTROL_AGENDA_ID) ? form.practica_id : null,
+        radiografia: form.radiografia || null,
+        fecha_hora: form.fecha_hora,
+        duracion_minutos: form.duracion_minutos,
+        notas: form.practica_id === CONTROL_AGENDA_ID && !form.notas ? 'Control de tratamiento' : form.notas || null,
+        estado: form.estado,
+      })
+      onGuardado()
+    } catch (err: any) {
+      const msg = err.message || 'Error al guardar el turno'
+      setError(msg.includes('409') || msg.includes('ya existe') ? 'Ya existe un turno en ese consultorio a esa hora' : msg)
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold text-gray-800">Nuevo turno</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Paciente *</label>
+            <input value={busquedaPaciente}
+              onChange={e => { setBusquedaPaciente(e.target.value); buscarPacientes(e.target.value) }}
+              placeholder="Buscar por nombre o DNI..."
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            {pacientes.length > 0 && (
+              <div className="border border-gray-200 rounded-lg mt-1 max-h-40 overflow-y-auto">
+                {pacientes.map((p: any) => (
+                  <div key={p.id}
+                    onClick={() => { setForm(f => ({ ...f, paciente_id: p.id })); setBusquedaPaciente(p.apellido_nombre); setPacientes([]) }}
+                    className="px-3 py-2 text-sm hover:bg-blue-50 cursor-pointer">
+                    {p.apellido_nombre} <span className="text-gray-400 text-xs">{p.dni}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {form.paciente_id && <p className="text-xs text-green-600 mt-1">✓ Paciente seleccionado</p>}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Profesional *</label>
+            <select value={form.profesional_id}
+              onChange={e => handleProfesionalChange(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">-- Seleccioná --</option>
+              {profesionales.map((p: any) => <option key={p.id} value={p.id}>{p.usuarios?.nombre}</option>)}
+            </select>
+            {advertenciaProf && (
+              <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3 text-sm text-yellow-800 flex items-start gap-2 mt-1">
+                <span>⚠️</span><span>{advertenciaProf}</span>
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Consultorio *</label>
+            <select value={form.consultorio_id} onChange={e => setForm(f => ({ ...f, consultorio_id: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">-- Seleccioná --</option>
+              {(() => {
+                if (!form.fecha_hora) return consultorios
+                const dt = new Date(form.fecha_hora)
+                const hora = `${dt.getHours().toString().padStart(2, '0')}:${dt.getMinutes().toString().padStart(2, '0')}`
+                const activos = profesionalesActivosEnFecha(dt, hora)
+                return activos > 0 ? consultorios.slice(0, activos) : consultorios
+              })().map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Práctica</label>
+            <select value={form.practica_id} onChange={e => setForm(f => ({ ...f, practica_id: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">-- Sin práctica --</option>
+              <option value={CONTROL_AGENDA_ID}>⭐ Control de tratamiento</option>
+              {practicasFiltradas.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Radiografía</label>
+            <select value={form.radiografia} onChange={e => setForm(f => ({ ...f, radiografia: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">-- Sin indicación --</option>
+              {RADIO_ESTADOS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+            <select value={form.estado} onChange={e => setForm(f => ({ ...f, estado: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              {ESTADOS.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Fecha y hora *</label>
+            <input type="datetime-local" value={form.fecha_hora}
+              onChange={e => setForm(f => ({ ...f, fecha_hora: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Duración</label>
+            <select value={form.duracion_minutos} onChange={e => setForm(f => ({ ...f, duracion_minutos: Number(e.target.value) }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value={15}>15 minutos</option>
+              <option value={30}>30 minutos</option>
+              <option value={45}>45 minutos</option>
+              <option value={60}>60 minutos</option>
+              <option value={90}>90 minutos</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Notas</label>
+            <textarea value={form.notas} onChange={e => setForm(f => ({ ...f, notas: e.target.value }))}
+              rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+          </div>
+          {error && <div className="bg-red-50 border border-red-200 rounded-lg p-3"><p className="text-red-600 text-sm">{error}</p></div>}
+          <div className="flex gap-2 pt-2">
+            <button type="button" onClick={onClose}
+              className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2 text-sm hover:bg-gray-50">Cancelar</button>
+            <button type="submit" disabled={loading}
+              className="flex-1 bg-blue-600 text-white rounded-lg py-2 text-sm hover:bg-blue-700 disabled:opacity-50">
+              {loading ? 'Guardando...' : 'Guardar turno'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── Detalle turno ─────────────────────────────────────────────────────────────
+function DetalleTurno({ turno, puedeModificar, onClose, onActualizado }: {
+  turno: Turno
+  puedeModificar: boolean
+  consultorios: Consultorio[]
+  onClose: () => void
+  onActualizado: () => void
+}) {
+  const [practicas, setPracticas] = useState<any[]>([])
+  const [notas, setNotas] = useState(turno.notas || '')
+  const [estado, setEstado] = useState(turno.estado)
+  const [practicaId, setPracticaId] = useState(turno.practica_id || '')
+  const [radiografia, setRadiografia] = useState(turno.radiografia || '')
+  const [guardando, setGuardando] = useState(false)
+  const [eliminando, setEliminando] = useState(false)
+  const [confirmarEliminar, setConfirmarEliminar] = useState(false)
+  const [errorEliminar, setErrorEliminar] = useState('')
+  const [advertenciaConflicto, setAdvertenciaConflicto] = useState('')
+
+  // Campos editables de fecha/hora y duración
+  const fechaHoraOriginal = format(toLocalAR(turno.fecha_hora), "yyyy-MM-dd'T'HH:mm")
+  const [fechaHora, setFechaHora] = useState(fechaHoraOriginal)
+  const [duracion, setDuracion] = useState(turno.duracion_minutos || 30)
+
+  useEffect(() => {
+    api.get<any[]>('/practicas?activa=true')
+      .then(data => setPracticas(data || []))
+      .catch(() => setPracticas([]))
+  }, [])
+
+  // Validar conflicto en tiempo real al cambiar fecha/hora o duración (chequea solapamiento real)
+  useEffect(() => {
+    if (!puedeModificar) return
+    if (fechaHora === fechaHoraOriginal && duracion === turno.duracion_minutos) {
+      setAdvertenciaConflicto(''); return
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const [fechaStr, timeStr] = fechaHora.split('T')
+        const horaStr = timeStr?.substring(0, 5)
+        if (!fechaStr || !horaStr) return
+
+        // Calcular rango del turno modificado en minutos
+        const [h, m] = horaStr.split(':').map(Number)
+        const inicioMin = h * 60 + m
+        const finMin = inicioMin + duracion
+
+        // Traer todos los turnos del mismo consultorio y fecha
+        const existentes = await api.get<any[]>(
+          `/turnos?consultorio_id=${turno.consultorio_id}&fecha=${fechaStr}`
+        )
+
+        // Detectar solapamiento: cualquier turno cuyo rango se intersecte con el nuevo
+        const conflicto = (existentes || []).find((t: any) => {
+          if (t.id === turno.id) return false
+          if (t.estado === 'cancelado' || t.estado === 'reprogramado') return false
+          const otroInicio = t.fecha_hora ? t.fecha_hora.substring(11, 16) : ''
+          if (!otroInicio) return false
+          const [oh, om] = otroInicio.split(':').map(Number)
+          const otroInicioMin = oh * 60 + om
+          const otroFinMin = otroInicioMin + (t.duracion_minutos || 30)
+          // Solapamiento si los rangos se intersectan
+          return inicioMin < otroFinMin && finMin > otroInicioMin
+        })
+
+        if (conflicto) {
+          const horaConflicto = conflicto.fecha_hora ? conflicto.fecha_hora.substring(11, 16) : ''
+          const pacNombre = conflicto.pacientes?.apellido_nombre || 'otro paciente'
+          setAdvertenciaConflicto(`⚠️ Se superpone con el turno de las ${horaConflicto} (${pacNombre}). No se puede guardar.`)
+        } else {
+          setAdvertenciaConflicto('')
+        }
+      } catch {
+        setAdvertenciaConflicto('')
+      }
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [fechaHora, duracion])
+
+  const tel = turno.pacientes?.telefono
+  const wappUrl = tel ? `https://wa.me/${tel.replace(/\D/g, '')}` : null
+  const radioInfo = RADIO_ESTADOS.find(r => r.value === radiografia)
+
+  async function guardar() {
+    if (advertenciaConflicto) return
+    setGuardando(true)
+    try {
+      await api.put(`/turnos/${turno.id}`, {
+        notas,
+        estado,
+        practica_id: practicaId || null,
+        radiografia: radiografia || null,
+        fecha_hora: fechaHora,
+        duracion_minutos: duracion,
+      })
+      onActualizado()
+    } catch (err) {
+      console.error('Error guardando turno:', err)
+    }
+    setGuardando(false)
+  }
+
+  async function eliminar() {
+    setEliminando(true)
+    setErrorEliminar('')
+    try {
+      await api.delete(`/turnos/${turno.id}`)
+      onActualizado()
+    } catch (err: any) {
+      setErrorEliminar(err.message || 'Error al eliminar el turno')
+      setEliminando(false)
+    }
+  }
+
+  const duraciones = [15, 30, 45, 60, 75, 90, 105, 120]
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold text-gray-800">Detalle del turno</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+        </div>
+        <div className="space-y-3 text-sm">
+          {/* Paciente */}
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs text-gray-400">Paciente</p>
+              <p className="font-medium text-gray-800">{turno.pacientes?.apellido_nombre}</p>
+              {tel && <p className="text-xs text-gray-500 mt-0.5">{tel}</p>}
+            </div>
+            <div className="flex gap-1.5 mt-1">
+              {wappUrl && (
+                <a href={wappUrl} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-xs text-green-600 border border-green-200 rounded px-2 py-1 hover:bg-green-50">
+                  <MessageCircle size={12} /> WA
+                </a>
+              )}
+              <a href={`/pacientes/${turno.pacientes?.id}`}
+                className="flex items-center gap-1 text-xs text-blue-600 border border-blue-200 rounded px-2 py-1 hover:bg-blue-50">
+                <UserRound size={12} /> Ficha
+              </a>
+            </div>
+          </div>
+
+          <div><p className="text-xs text-gray-400">Profesional</p><p className="text-gray-800">{turno.profesionales?.usuarios?.nombre}</p></div>
+          <div><p className="text-xs text-gray-400">Consultorio</p><p className="text-gray-800">{turno.consultorios?.nombre}</p></div>
+
+          {puedeModificar ? (
+            <>
+              {/* Fecha y hora editable */}
+              <div>
+                <p className="text-xs text-gray-400 mb-1">Fecha y hora</p>
+                <input type="datetime-local" step="900" value={fechaHora}
+                  onChange={e => setFechaHora(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                {advertenciaConflicto && (
+                  <p className="text-xs text-orange-600 mt-1 bg-orange-50 border border-orange-200 rounded p-2">{advertenciaConflicto}</p>
+                )}
+              </div>
+
+              {/* Duración editable */}
+              <div>
+                <p className="text-xs text-gray-400 mb-1">Duración</p>
+                <select value={duracion} onChange={e => setDuracion(Number(e.target.value))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  {duraciones.map(d => (
+                    <option key={d} value={d}>
+                      {d} min{d === 60 ? ' (1h)' : d >= 120 ? ` (${Math.floor(d / 60)}h${d % 60 > 0 ? ` ${d % 60}min` : ''})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <p className="text-xs text-gray-400 mb-1">Práctica</p>
+                <select value={practicaId} onChange={e => setPracticaId(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">-- Sin práctica --</option>
+                  {practicas.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                </select>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 mb-1">Radiografía</p>
+                <select value={radiografia} onChange={e => setRadiografia(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">-- Sin indicación --</option>
+                  {RADIO_ESTADOS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 mb-1">Estado</p>
+                <select value={estado} onChange={e => setEstado(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  {ESTADOS.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 mb-1">Notas</p>
+                <textarea value={notas} onChange={e => setNotas(e.target.value)} rows={2}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <p className="text-xs text-gray-400">Fecha y hora</p>
+                <p className="text-gray-800">{format(toLocalAR(turno.fecha_hora), "dd/MM/yyyy 'a las' HH:mm")}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">Duración</p>
+                <p className="text-gray-800">{turno.duracion_minutos} min</p>
+              </div>
+              {turno.practicas?.nombre && <div><p className="text-xs text-gray-400">Práctica</p><p className="text-gray-800">{turno.practicas.nombre}</p></div>}
+              {radiografia && radioInfo && (
+                <div>
+                  <p className="text-xs text-gray-400">Radiografía</p>
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${radioInfo.clase}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${radioInfo.dot}`} />
+                    {radioInfo.label}
+                  </span>
+                </div>
+              )}
+              <div>
+                <p className="text-xs text-gray-400">Estado</p>
+                <span className={`inline-block px-2 py-0.5 rounded-full text-xs border ${claseDeEstado(estado)}`}>{estado}</span>
+              </div>
+              {notas && <div><p className="text-xs text-gray-400">Notas</p><p className="text-gray-800">{notas}</p></div>}
+            </>
+          )}
+        </div>
+
+        {puedeModificar ? (
+          <>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => { setConfirmarEliminar(true); setErrorEliminar('') }}
+                className="border border-red-300 text-red-500 rounded-lg py-2 px-3 text-sm hover:bg-red-50">Eliminar</button>
+              <button onClick={guardar} disabled={guardando || !!advertenciaConflicto}
+                className="flex-1 bg-blue-600 text-white rounded-lg py-2 text-sm hover:bg-blue-700 disabled:opacity-50">
+                {guardando ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+            </div>
+            {confirmarEliminar && (
+              <div className="mt-3 p-3 bg-red-50 rounded-lg border border-red-200">
+                <p className="text-sm text-red-700 mb-2">¿Seguro que querés eliminar este turno?</p>
+                {errorEliminar && (
+                  <p className="text-xs text-red-600 mb-2 bg-red-100 rounded p-2">{errorEliminar}</p>
+                )}
+                <div className="flex gap-2">
+                  <button onClick={() => { setConfirmarEliminar(false); setErrorEliminar('') }}
+                    className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-1.5 text-sm hover:bg-gray-50">Cancelar</button>
+                  <button onClick={eliminar} disabled={eliminando}
+                    className="flex-1 bg-red-500 text-white rounded-lg py-1.5 text-sm hover:bg-red-600 disabled:opacity-50">
+                    {eliminando ? 'Eliminando...' : 'Sí, eliminar'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <button onClick={onClose} className="w-full mt-4 border border-gray-300 text-gray-700 rounded-lg py-2 text-sm hover:bg-gray-50">Cerrar</button>
+        )}
+      </div>
+    </div>
+  )
+}

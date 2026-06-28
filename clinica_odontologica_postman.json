@@ -1,0 +1,1518 @@
+{
+  "info": {
+    "_postman_id": "clinica-odontologica-api",
+    "name": "Clínica Odontológica — API",
+    "description": "Collection completa del backend. Ejecutar '🔐 Login ✅' primero: guarda el token automáticamente en la variable {{TOKEN}}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "BASE_URL", "value": "http://localhost:3001/api", "type": "string" },
+    { "key": "TOKEN", "value": "", "type": "string" }
+  ],
+  "item": [
+
+    {
+      "name": "🔐 Auth",
+      "item": [
+        {
+          "name": "Login ✅",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  pm.collectionVariables.set('TOKEN', json.token);",
+                  "  console.log('Token guardado:', json.token.substring(0, 30) + '...');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@clinica.com\",\n  \"password\": \"clinica123\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/auth/login", "host": ["{{BASE_URL}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Login ✅ (recepcionista)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  pm.collectionVariables.set('TOKEN', json.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"recepcion@clinica.com\",\n  \"password\": \"clinica123\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/auth/login", "host": ["{{BASE_URL}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Login ❌ 401 — Contraseña incorrecta",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@clinica.com\",\n  \"password\": \"wrongpassword\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/auth/login", "host": ["{{BASE_URL}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Login ❌ 401 — Usuario inexistente",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"noexiste@clinica.com\",\n  \"password\": \"clinica123\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/auth/login", "host": ["{{BASE_URL}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Login ❌ 400 — Campos vacíos",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": { "raw": "{{BASE_URL}}/auth/login", "host": ["{{BASE_URL}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Me ✅ — Token válido",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/auth/me", "host": ["{{BASE_URL}}"], "path": ["auth", "me"] }
+          }
+        },
+        {
+          "name": "Me ❌ 401 — Sin token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{BASE_URL}}/auth/me", "host": ["{{BASE_URL}}"], "path": ["auth", "me"] }
+          }
+        },
+        {
+          "name": "Me ❌ 401 — Token inválido",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer token.falso.invalido" }],
+            "url": { "raw": "{{BASE_URL}}/auth/me", "host": ["{{BASE_URL}}"], "path": ["auth", "me"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🔒 Errores de autenticación (sin token)",
+      "item": [
+        {
+          "name": "❌ 401 — GET /pacientes sin token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{BASE_URL}}/pacientes", "host": ["{{BASE_URL}}"], "path": ["pacientes"] }
+          }
+        },
+        {
+          "name": "❌ 401 — GET /usuarios sin token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{BASE_URL}}/usuarios", "host": ["{{BASE_URL}}"], "path": ["usuarios"] }
+          }
+        },
+        {
+          "name": "❌ 401 — Bearer token.falso.invalido",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer token.falso.invalido" }],
+            "url": { "raw": "{{BASE_URL}}/turnos", "host": ["{{BASE_URL}}"], "path": ["turnos"] }
+          }
+        },
+        {
+          "name": "❌ 404 — Ruta inexistente",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/ruta-que-no-existe", "host": ["{{BASE_URL}}"], "path": ["ruta-que-no-existe"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "👥 Usuarios",
+      "item": [
+        {
+          "name": "Listar todos los usuarios",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/usuarios", "host": ["{{BASE_URL}}"], "path": ["usuarios"] }
+          }
+        },
+        {
+          "name": "Listar usuarios activos",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/usuarios?activo=true",
+              "host": ["{{BASE_URL}}"],
+              "path": ["usuarios"],
+              "query": [{ "key": "activo", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "Obtener usuario por ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/usuarios/1", "host": ["{{BASE_URL}}"], "path": ["usuarios", "1"] }
+          }
+        },
+        {
+          "name": "❌ 404 — Usuario inexistente",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/usuarios/9999", "host": ["{{BASE_URL}}"], "path": ["usuarios", "9999"] }
+          }
+        },
+        {
+          "name": "Crear usuario ✅",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Carlos\",\n  \"apellido\": \"Gutierrez\",\n  \"email\": \"carlos.gutierrez@clinica.com\",\n  \"password\": \"segura123\",\n  \"rol\": \"recepcionista\",\n  \"sucursal_id\": 1\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/usuarios", "host": ["{{BASE_URL}}"], "path": ["usuarios"] }
+          }
+        },
+        {
+          "name": "❌ 400 — Campos obligatorios faltantes",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Solo nombre\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/usuarios", "host": ["{{BASE_URL}}"], "path": ["usuarios"] }
+          }
+        },
+        {
+          "name": "❌ 400 — Contraseña menor a 6 caracteres",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Ana\",\n  \"apellido\": \"Lopez\",\n  \"email\": \"ana@clinica.com\",\n  \"password\": \"123\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/usuarios", "host": ["{{BASE_URL}}"], "path": ["usuarios"] }
+          }
+        },
+        {
+          "name": "❌ 400 — Rol inválido",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Juan\",\n  \"apellido\": \"Perez\",\n  \"email\": \"juan2@clinica.com\",\n  \"password\": \"segura123\",\n  \"rol\": \"rol_inventado\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/usuarios", "host": ["{{BASE_URL}}"], "path": ["usuarios"] }
+          }
+        },
+        {
+          "name": "❌ 409 — Email duplicado",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Admin\",\n  \"apellido\": \"Duplicado\",\n  \"email\": \"admin@clinica.com\",\n  \"password\": \"clinica123\",\n  \"rol\": \"admin\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/usuarios", "host": ["{{BASE_URL}}"], "path": ["usuarios"] }
+          }
+        },
+        {
+          "name": "Actualizar usuario ✅",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Admin\",\n  \"apellido\": \"Actualizado\",\n  \"activo\": true\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/usuarios/1", "host": ["{{BASE_URL}}"], "path": ["usuarios", "1"] }
+          }
+        },
+        {
+          "name": "❌ 404 — Actualizar usuario inexistente",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"No existe\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/usuarios/9999", "host": ["{{BASE_URL}}"], "path": ["usuarios", "9999"] }
+          }
+        },
+        {
+          "name": "Eliminar usuario ✅",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/usuarios/4", "host": ["{{BASE_URL}}"], "path": ["usuarios", "4"] }
+          }
+        },
+        {
+          "name": "❌ 404 — Eliminar usuario inexistente",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/usuarios/9999", "host": ["{{BASE_URL}}"], "path": ["usuarios", "9999"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🦷 Pacientes",
+      "item": [
+        {
+          "name": "Listar todos los pacientes",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/pacientes", "host": ["{{BASE_URL}}"], "path": ["pacientes"] }
+          }
+        },
+        {
+          "name": "Listar pacientes activos",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/pacientes?activo=true",
+              "host": ["{{BASE_URL}}"],
+              "path": ["pacientes"],
+              "query": [{ "key": "activo", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "Buscar pacientes por nombre/apellido/DNI",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/pacientes?busqueda=garcia",
+              "host": ["{{BASE_URL}}"],
+              "path": ["pacientes"],
+              "query": [{ "key": "busqueda", "value": "garcia" }]
+            }
+          }
+        },
+        {
+          "name": "Listar pacientes con límite",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/pacientes?limit=5",
+              "host": ["{{BASE_URL}}"],
+              "path": ["pacientes"],
+              "query": [{ "key": "limit", "value": "5" }]
+            }
+          }
+        },
+        {
+          "name": "Obtener paciente por ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/pacientes/1", "host": ["{{BASE_URL}}"], "path": ["pacientes", "1"] }
+          }
+        },
+        {
+          "name": "❌ 404 — Paciente inexistente",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/pacientes/9999", "host": ["{{BASE_URL}}"], "path": ["pacientes", "9999"] }
+          }
+        },
+        {
+          "name": "Crear paciente ✅",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"María\",\n  \"apellido\": \"Fernández\",\n  \"dni\": \"38111222\",\n  \"fecha_nacimiento\": \"1990-05-15\",\n  \"telefono\": \"3512345678\",\n  \"email\": \"maria.fernandez@mail.com\",\n  \"direccion\": \"Calle Falsa 123\",\n  \"obra_social\": \"OSDE\",\n  \"numero_afiliado\": \"123456\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/pacientes", "host": ["{{BASE_URL}}"], "path": ["pacientes"] }
+          }
+        },
+        {
+          "name": "❌ 400 — Nombre y apellido obligatorios",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dni\": \"99999999\",\n  \"telefono\": \"351000000\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/pacientes", "host": ["{{BASE_URL}}"], "path": ["pacientes"] }
+          }
+        },
+        {
+          "name": "❌ 409 — DNI duplicado",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Otro\",\n  \"apellido\": \"Paciente\",\n  \"dni\": \"38111222\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/pacientes", "host": ["{{BASE_URL}}"], "path": ["pacientes"] }
+          }
+        },
+        {
+          "name": "Actualizar paciente ✅",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"telefono\": \"3519999999\",\n  \"obra_social\": \"Swiss Medical\",\n  \"numero_afiliado\": \"654321\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/pacientes/1", "host": ["{{BASE_URL}}"], "path": ["pacientes", "1"] }
+          }
+        },
+        {
+          "name": "❌ 404 — Actualizar paciente inexistente",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"telefono\": \"3519999999\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/pacientes/9999", "host": ["{{BASE_URL}}"], "path": ["pacientes", "9999"] }
+          }
+        },
+        {
+          "name": "Desactivar paciente (soft delete) ✅",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/pacientes/3", "host": ["{{BASE_URL}}"], "path": ["pacientes", "3"] }
+          }
+        },
+        {
+          "name": "❌ 404 — Desactivar paciente inexistente",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/pacientes/9999", "host": ["{{BASE_URL}}"], "path": ["pacientes", "9999"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📅 Turnos",
+      "item": [
+        {
+          "name": "Listar todos los turnos",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/turnos", "host": ["{{BASE_URL}}"], "path": ["turnos"] }
+          }
+        },
+        {
+          "name": "Listar turnos por fecha",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/turnos?fecha=2026-06-27",
+              "host": ["{{BASE_URL}}"],
+              "path": ["turnos"],
+              "query": [{ "key": "fecha", "value": "2026-06-27" }]
+            }
+          }
+        },
+        {
+          "name": "Listar turnos rango de fechas",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/turnos?fecha_desde=2026-06-23&fecha_hasta=2026-06-27",
+              "host": ["{{BASE_URL}}"],
+              "path": ["turnos"],
+              "query": [
+                { "key": "fecha_desde", "value": "2026-06-23" },
+                { "key": "fecha_hasta", "value": "2026-06-27" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Listar turnos por profesional",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/turnos?profesional_id=1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["turnos"],
+              "query": [{ "key": "profesional_id", "value": "1" }]
+            }
+          }
+        },
+        {
+          "name": "Listar turnos por estado",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/turnos?estado=agendado",
+              "host": ["{{BASE_URL}}"],
+              "path": ["turnos"],
+              "query": [{ "key": "estado", "value": "agendado" }]
+            }
+          }
+        },
+        {
+          "name": "Disponibilidad por profesional y fecha ✅",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/turnos/disponibilidad?profesional_id=1&fecha=2026-06-27",
+              "host": ["{{BASE_URL}}"],
+              "path": ["turnos", "disponibilidad"],
+              "query": [
+                { "key": "profesional_id", "value": "1" },
+                { "key": "fecha", "value": "2026-06-27" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "❌ 400 — Disponibilidad sin parámetros",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/turnos/disponibilidad", "host": ["{{BASE_URL}}"], "path": ["turnos", "disponibilidad"] }
+          }
+        },
+        {
+          "name": "Obtener turno por ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/turnos/1", "host": ["{{BASE_URL}}"], "path": ["turnos", "1"] }
+          }
+        },
+        {
+          "name": "❌ 404 — Turno inexistente",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/turnos/9999", "host": ["{{BASE_URL}}"], "path": ["turnos", "9999"] }
+          }
+        },
+        {
+          "name": "Crear turno ✅",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paciente_id\": 1,\n  \"profesional_id\": 1,\n  \"consultorio_id\": 1,\n  \"sucursal_id\": 1,\n  \"fecha_hora\": \"2026-07-10T10:00\",\n  \"duracion_minutos\": 30,\n  \"practica_id\": 1,\n  \"estado\": \"agendado\",\n  \"notas\": \"Control anual\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/turnos", "host": ["{{BASE_URL}}"], "path": ["turnos"] }
+          }
+        },
+        {
+          "name": "❌ 400 — Campos obligatorios faltantes",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"consultorio_id\": 1\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/turnos", "host": ["{{BASE_URL}}"], "path": ["turnos"] }
+          }
+        },
+        {
+          "name": "❌ 409 — Conflicto de horario (mismo consultorio y hora)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paciente_id\": 2,\n  \"profesional_id\": 2,\n  \"consultorio_id\": 1,\n  \"sucursal_id\": 1,\n  \"fecha_hora\": \"2026-07-10T10:00\",\n  \"duracion_minutos\": 30,\n  \"notas\": \"Este turno choca con el anterior creado\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/turnos", "host": ["{{BASE_URL}}"], "path": ["turnos"] }
+          }
+        },
+        {
+          "name": "Actualizar turno — cambiar estado ✅",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"atendido\",\n  \"notas\": \"Paciente atendido sin inconvenientes\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/turnos/1", "host": ["{{BASE_URL}}"], "path": ["turnos", "1"] }
+          }
+        },
+        {
+          "name": "Actualizar turno — reprogramar fecha ✅",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fecha_hora\": \"2026-07-15T14:00\",\n  \"duracion_minutos\": 45,\n  \"estado\": \"reprogramado\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/turnos/2", "host": ["{{BASE_URL}}"], "path": ["turnos", "2"] }
+          }
+        },
+        {
+          "name": "Cancelar turno ✅",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/turnos/2", "host": ["{{BASE_URL}}"], "path": ["turnos", "2"] }
+          }
+        },
+        {
+          "name": "❌ 404 — Cancelar turno inexistente",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/turnos/9999", "host": ["{{BASE_URL}}"], "path": ["turnos", "9999"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🩺 Prácticas",
+      "item": [
+        {
+          "name": "Listar todas las prácticas",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/practicas", "host": ["{{BASE_URL}}"], "path": ["practicas"] }
+          }
+        },
+        {
+          "name": "Listar prácticas activas",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/practicas?activa=true",
+              "host": ["{{BASE_URL}}"],
+              "path": ["practicas"],
+              "query": [{ "key": "activa", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "Obtener práctica por ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/practicas/1", "host": ["{{BASE_URL}}"], "path": ["practicas", "1"] }
+          }
+        },
+        {
+          "name": "❌ 404 — Práctica inexistente",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/practicas/9999", "host": ["{{BASE_URL}}"], "path": ["practicas", "9999"] }
+          }
+        },
+        {
+          "name": "Crear práctica ✅",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Blanqueamiento dental\",\n  \"valor\": 15000,\n  \"especialidad_id\": 1,\n  \"cobra_descartable\": true,\n  \"costo_mecanico\": null,\n  \"multa\": null,\n  \"tipo_multa\": null\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/practicas", "host": ["{{BASE_URL}}"], "path": ["practicas"] }
+          }
+        },
+        {
+          "name": "❌ 400 — Nombre obligatorio",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"valor\": 5000\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/practicas", "host": ["{{BASE_URL}}"], "path": ["practicas"] }
+          }
+        },
+        {
+          "name": "Actualizar práctica ✅",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Extracción simple\",\n  \"valor\": 8500,\n  \"cobra_descartable\": true\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/practicas/1", "host": ["{{BASE_URL}}"], "path": ["practicas", "1"] }
+          }
+        },
+        {
+          "name": "❌ 404 — Actualizar práctica inexistente",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"valor\": 9000\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/practicas/9999", "host": ["{{BASE_URL}}"], "path": ["practicas", "9999"] }
+          }
+        },
+        {
+          "name": "Desactivar práctica (soft delete) ✅",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/practicas/2", "host": ["{{BASE_URL}}"], "path": ["practicas", "2"] }
+          }
+        },
+        {
+          "name": "❌ 404 — Desactivar práctica inexistente",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/practicas/9999", "host": ["{{BASE_URL}}"], "path": ["practicas", "9999"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📋 Tratamientos",
+      "item": [
+        {
+          "name": "Listar todos los tratamientos",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/tratamientos", "host": ["{{BASE_URL}}"], "path": ["tratamientos"] }
+          }
+        },
+        {
+          "name": "Listar tratamientos por paciente",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/tratamientos?paciente_id=1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["tratamientos"],
+              "query": [{ "key": "paciente_id", "value": "1" }]
+            }
+          }
+        },
+        {
+          "name": "Listar tratamientos por estado",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/tratamientos?estado=pendiente",
+              "host": ["{{BASE_URL}}"],
+              "path": ["tratamientos"],
+              "query": [{ "key": "estado", "value": "pendiente" }]
+            }
+          }
+        },
+        {
+          "name": "Obtener tratamiento por ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/tratamientos/1", "host": ["{{BASE_URL}}"], "path": ["tratamientos", "1"] }
+          }
+        },
+        {
+          "name": "❌ 404 — Tratamiento inexistente",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/tratamientos/9999", "host": ["{{BASE_URL}}"], "path": ["tratamientos", "9999"] }
+          }
+        },
+        {
+          "name": "Crear tratamiento ✅",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paciente_id\": 1,\n  \"profesional_id\": 1,\n  \"practica_id\": 1,\n  \"fecha\": \"2026-06-27\",\n  \"estado\": \"pendiente\",\n  \"monto\": 12000,\n  \"observaciones\": \"Primera sesión de tratamiento\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/tratamientos", "host": ["{{BASE_URL}}"], "path": ["tratamientos"] }
+          }
+        },
+        {
+          "name": "❌ 400 — paciente_id y fecha obligatorios",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"profesional_id\": 1,\n  \"monto\": 5000\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/tratamientos", "host": ["{{BASE_URL}}"], "path": ["tratamientos"] }
+          }
+        },
+        {
+          "name": "❌ 404 — Paciente referenciado no existe",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paciente_id\": 9999,\n  \"fecha\": \"2026-06-27\",\n  \"monto\": 5000\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/tratamientos", "host": ["{{BASE_URL}}"], "path": ["tratamientos"] }
+          }
+        },
+        {
+          "name": "Actualizar tratamiento ✅",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"realizado\",\n  \"monto\": 13500,\n  \"observaciones\": \"Tratamiento completado exitosamente\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/tratamientos/1", "host": ["{{BASE_URL}}"], "path": ["tratamientos", "1"] }
+          }
+        },
+        {
+          "name": "❌ 404 — Actualizar tratamiento inexistente",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"realizado\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/tratamientos/9999", "host": ["{{BASE_URL}}"], "path": ["tratamientos", "9999"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "💰 Cobros",
+      "item": [
+        {
+          "name": "Listar todos los cobros",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/cobros", "host": ["{{BASE_URL}}"], "path": ["cobros"] }
+          }
+        },
+        {
+          "name": "Listar cobros por paciente",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/cobros?paciente_id=1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["cobros"],
+              "query": [{ "key": "paciente_id", "value": "1" }]
+            }
+          }
+        },
+        {
+          "name": "Listar cobros por tratamiento",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/cobros?tratamiento_id=1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["cobros"],
+              "query": [{ "key": "tratamiento_id", "value": "1" }]
+            }
+          }
+        },
+        {
+          "name": "Crear cobro ✅",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paciente_id\": 1,\n  \"tratamiento_id\": 1,\n  \"monto\": 12000,\n  \"fecha\": \"2026-06-27\",\n  \"medio_pago\": \"efectivo\",\n  \"descripcion\": \"Pago total del tratamiento\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/cobros", "host": ["{{BASE_URL}}"], "path": ["cobros"] }
+          }
+        },
+        {
+          "name": "❌ 400 — paciente_id, monto y fecha obligatorios",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"medio_pago\": \"efectivo\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/cobros", "host": ["{{BASE_URL}}"], "path": ["cobros"] }
+          }
+        },
+        {
+          "name": "❌ 404 — Paciente referenciado no existe",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paciente_id\": 9999,\n  \"monto\": 5000,\n  \"fecha\": \"2026-06-27\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/cobros", "host": ["{{BASE_URL}}"], "path": ["cobros"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "👨‍⚕️ Profesionales",
+      "item": [
+        {
+          "name": "Listar todos los profesionales",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/profesionales", "host": ["{{BASE_URL}}"], "path": ["profesionales"] }
+          }
+        },
+        {
+          "name": "Listar profesionales activos",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/profesionales?activo=true",
+              "host": ["{{BASE_URL}}"],
+              "path": ["profesionales"],
+              "query": [{ "key": "activo", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "Obtener profesional por ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/profesionales/1", "host": ["{{BASE_URL}}"], "path": ["profesionales", "1"] }
+          }
+        },
+        {
+          "name": "❌ 404 — Profesional inexistente",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/profesionales/9999", "host": ["{{BASE_URL}}"], "path": ["profesionales", "9999"] }
+          }
+        },
+        {
+          "name": "Crear profesional ✅",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Sofía\",\n  \"apellido\": \"Martínez\",\n  \"dni\": \"25000111\",\n  \"telefono\": \"3514567890\",\n  \"email\": \"sofia.martinez@clinica.com\",\n  \"matricula\": \"MP-9999\",\n  \"nombre_corto\": \"Dra. Martínez\",\n  \"activo\": true\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/profesionales", "host": ["{{BASE_URL}}"], "path": ["profesionales"] }
+          }
+        },
+        {
+          "name": "❌ 400 — Nombre y apellido obligatorios",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"matricula\": \"MP-0001\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/profesionales", "host": ["{{BASE_URL}}"], "path": ["profesionales"] }
+          }
+        },
+        {
+          "name": "Actualizar profesional ✅",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"telefono\": \"3510001111\",\n  \"activo\": true,\n  \"porcentaje_practicas\": 60\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/profesionales/1", "host": ["{{BASE_URL}}"], "path": ["profesionales", "1"] }
+          }
+        },
+        {
+          "name": "❌ 404 — Actualizar profesional inexistente",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activo\": false\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/profesionales/9999", "host": ["{{BASE_URL}}"], "path": ["profesionales", "9999"] }
+          }
+        },
+        {
+          "name": "Actualizar especialidades del profesional ✅",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"especialidades\": [1, 2]\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/profesionales/1/especialidades", "host": ["{{BASE_URL}}"], "path": ["profesionales", "1", "especialidades"] }
+          }
+        },
+        {
+          "name": "❌ 404 — Especialidades de profesional inexistente",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"especialidades\": [1]\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/profesionales/9999/especialidades", "host": ["{{BASE_URL}}"], "path": ["profesionales", "9999", "especialidades"] }
+          }
+        },
+        {
+          "name": "Actualizar porcentajes del profesional ✅",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"porcentajes\": [\n    { \"especialidad_id\": 1, \"porcentaje\": 60 },\n    { \"especialidad_id\": 2, \"porcentaje\": 50 }\n  ]\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/profesionales/1/porcentajes", "host": ["{{BASE_URL}}"], "path": ["profesionales", "1", "porcentajes"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🏥 Catálogos",
+      "item": [
+        {
+          "name": "Listar sucursales activas",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/sucursales", "host": ["{{BASE_URL}}"], "path": ["sucursales"] }
+          }
+        },
+        {
+          "name": "Listar consultorios",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/consultorios", "host": ["{{BASE_URL}}"], "path": ["consultorios"] }
+          }
+        },
+        {
+          "name": "Listar consultorios por sucursal",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/consultorios?sucursal_id=1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["consultorios"],
+              "query": [{ "key": "sucursal_id", "value": "1" }]
+            }
+          }
+        },
+        {
+          "name": "Obtener configuración del sistema",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/configuracion", "host": ["{{BASE_URL}}"], "path": ["configuracion"] }
+          }
+        },
+        {
+          "name": "Listar días inhabilitados",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/dias-inhabilitados", "host": ["{{BASE_URL}}"], "path": ["dias-inhabilitados"] }
+          }
+        },
+        {
+          "name": "Listar días inhabilitados — rango de fechas",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/dias-inhabilitados?desde=2026-06-01&hasta=2026-12-31",
+              "host": ["{{BASE_URL}}"],
+              "path": ["dias-inhabilitados"],
+              "query": [
+                { "key": "desde", "value": "2026-06-01" },
+                { "key": "hasta", "value": "2026-12-31" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Crear día inhabilitado ✅",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fecha\": \"2026-07-09\",\n  \"sucursal_id\": 1,\n  \"motivo\": \"Feriado nacional — Día de la Independencia\",\n  \"tipo\": \"feriado\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/dias-inhabilitados", "host": ["{{BASE_URL}}"], "path": ["dias-inhabilitados"] }
+          }
+        },
+        {
+          "name": "❌ 400 — Fecha obligatoria",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"motivo\": \"Sin fecha indicada\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/dias-inhabilitados", "host": ["{{BASE_URL}}"], "path": ["dias-inhabilitados"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🕐 Horarios y Ausencias",
+      "item": [
+        {
+          "name": "Listar horarios de profesionales",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/horarios-profesionales", "host": ["{{BASE_URL}}"], "path": ["horarios-profesionales"] }
+          }
+        },
+        {
+          "name": "Listar horarios de un profesional",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/horarios-profesionales?profesional_id=1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["horarios-profesionales"],
+              "query": [{ "key": "profesional_id", "value": "1" }]
+            }
+          }
+        },
+        {
+          "name": "Listar horarios activos por sucursal",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/horarios-profesionales?sucursal_id=1&activo=true",
+              "host": ["{{BASE_URL}}"],
+              "path": ["horarios-profesionales"],
+              "query": [
+                { "key": "sucursal_id", "value": "1" },
+                { "key": "activo", "value": "true" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Crear horario de profesional ✅",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"profesional_id\": 1,\n  \"sucursal_id\": 1,\n  \"dia_semana\": 1,\n  \"turno\": \"mañana\",\n  \"hora_inicio\": \"08:00\",\n  \"hora_fin\": \"13:00\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/horarios-profesionales", "host": ["{{BASE_URL}}"], "path": ["horarios-profesionales"] }
+          }
+        },
+        {
+          "name": "❌ 400 — Campos obligatorios faltantes",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sucursal_id\": 1,\n  \"turno\": \"mañana\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/horarios-profesionales", "host": ["{{BASE_URL}}"], "path": ["horarios-profesionales"] }
+          }
+        },
+        {
+          "name": "Actualizar horario ✅",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hora_inicio\": \"09:00\",\n  \"hora_fin\": \"14:00\",\n  \"activo\": true\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/horarios-profesionales/1", "host": ["{{BASE_URL}}"], "path": ["horarios-profesionales", "1"] }
+          }
+        },
+        {
+          "name": "❌ 404 — Actualizar horario inexistente",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activo\": false\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/horarios-profesionales/9999", "host": ["{{BASE_URL}}"], "path": ["horarios-profesionales", "9999"] }
+          }
+        },
+        {
+          "name": "Eliminar horario ✅",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/horarios-profesionales/1", "host": ["{{BASE_URL}}"], "path": ["horarios-profesionales", "1"] }
+          }
+        },
+        {
+          "name": "❌ 404 — Eliminar horario inexistente",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/horarios-profesionales/9999", "host": ["{{BASE_URL}}"], "path": ["horarios-profesionales", "9999"] }
+          }
+        },
+        {
+          "name": "Listar ausencias de profesionales",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/ausencias-profesionales", "host": ["{{BASE_URL}}"], "path": ["ausencias-profesionales"] }
+          }
+        },
+        {
+          "name": "Listar ausencias por profesional y rango",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/ausencias-profesionales?profesional_id=1&fecha_desde=2026-06-01&fecha_hasta=2026-07-31",
+              "host": ["{{BASE_URL}}"],
+              "path": ["ausencias-profesionales"],
+              "query": [
+                { "key": "profesional_id", "value": "1" },
+                { "key": "fecha_desde", "value": "2026-06-01" },
+                { "key": "fecha_hasta", "value": "2026-07-31" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📊 Especialidades",
+      "item": [
+        {
+          "name": "Listar especialidades activas",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/especialidades", "host": ["{{BASE_URL}}"], "path": ["especialidades"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🚪 Orden de Llegada",
+      "item": [
+        {
+          "name": "Listar orden de llegada — hoy",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/orden-llegada", "host": ["{{BASE_URL}}"], "path": ["orden-llegada"] }
+          }
+        },
+        {
+          "name": "Listar orden de llegada — fecha específica",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/orden-llegada?fecha=2026-06-27",
+              "host": ["{{BASE_URL}}"],
+              "path": ["orden-llegada"],
+              "query": [{ "key": "fecha", "value": "2026-06-27" }]
+            }
+          }
+        },
+        {
+          "name": "Listar orden por profesional",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/orden-llegada?profesional_id=1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["orden-llegada"],
+              "query": [{ "key": "profesional_id", "value": "1" }]
+            }
+          }
+        },
+        {
+          "name": "Registrar llegada de paciente ✅",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paciente_id\": 1,\n  \"profesional_id\": 1,\n  \"fecha\": \"2026-06-27\",\n  \"hora_llegada\": \"09:15\"\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/orden-llegada", "host": ["{{BASE_URL}}"], "path": ["orden-llegada"] }
+          }
+        },
+        {
+          "name": "❌ 400 — paciente_id y hora_llegada obligatorios",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"profesional_id\": 1\n}"
+            },
+            "url": { "raw": "{{BASE_URL}}/orden-llegada", "host": ["{{BASE_URL}}"], "path": ["orden-llegada"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "❤️ Health",
+      "item": [
+        {
+          "name": "Health check (ruta pública)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{BASE_URL}}/health", "host": ["{{BASE_URL}}"], "path": ["health"] }
+          }
+        }
+      ]
+    }
+
+  ]
+}
