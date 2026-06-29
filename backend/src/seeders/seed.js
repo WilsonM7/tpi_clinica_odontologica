@@ -12,7 +12,6 @@ const {
   ProfesionalEspecialidad,
   ProfesionalHorario,
   Tratamiento,
-  Cobro,
   Turno,
   OrdenLlegada,
   Configuracion,
@@ -141,16 +140,6 @@ async function seed() {
   })
   console.log('✅ Tratamientos listos')
 
-  // ── Cobros ────────────────────────────────────────────────────────────────
-  await Cobro.create({
-    paciente_id: pac1.id, tratamiento_id: trat1.id, fecha: '2026-06-01',
-    monto: 5000, medio_pago: 'efectivo', descripcion: 'Pago sesión control',
-  })
-  await Cobro.create({
-    paciente_id: pac3.id, tratamiento_id: null, fecha: '2026-06-10',
-    monto: 15000, medio_pago: 'transferencia', descripcion: 'Seña tratamiento',
-  })
-  console.log('✅ Cobros listos')
 
   // ── Turnos ────────────────────────────────────────────────────────────────
   // Semana actual: 2026-06-09 (lun) al 2026-06-13 (vie)

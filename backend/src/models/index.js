@@ -12,7 +12,6 @@ const ProfesionalPorcentajeEspecialidad = require('./ProfesionalPorcentajeEspeci
 const ProfesionalHorario = require('./ProfesionalHorario')
 const ProfesionalAusencia = require('./ProfesionalAusencia')
 const Tratamiento = require('./Tratamiento')
-const Cobro = require('./Cobro')
 const Turno = require('./Turno')
 const OrdenLlegada = require('./OrdenLlegada')
 const Configuracion = require('./Configuracion')
@@ -71,13 +70,6 @@ Tratamiento.belongsTo(Profesional, { foreignKey: 'profesional_id', as: 'profesio
 Practica.hasMany(Tratamiento, { foreignKey: 'practica_id', as: 'tratamientos' })
 Tratamiento.belongsTo(Practica, { foreignKey: 'practica_id', as: 'practica' })
 
-// Paciente <-> Cobro
-Paciente.hasMany(Cobro, { foreignKey: 'paciente_id', as: 'cobros' })
-Cobro.belongsTo(Paciente, { foreignKey: 'paciente_id', as: 'paciente' })
-
-// Tratamiento <-> Cobro
-Tratamiento.hasMany(Cobro, { foreignKey: 'tratamiento_id', as: 'cobros' })
-Cobro.belongsTo(Tratamiento, { foreignKey: 'tratamiento_id', as: 'tratamiento' })
 
 // Paciente <-> Turno
 Paciente.hasMany(Turno, { foreignKey: 'paciente_id', as: 'turnos' })
@@ -121,7 +113,6 @@ module.exports = {
   ProfesionalHorario,
   ProfesionalAusencia,
   Tratamiento,
-  Cobro,
   Turno,
   OrdenLlegada,
   Configuracion,
