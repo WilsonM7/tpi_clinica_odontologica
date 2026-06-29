@@ -62,7 +62,7 @@ function App() {
   )
 
   return (
-    <AuthProvider user={user}>
+    <AuthProvider user={user} logout={handleLogout}>
       <InactividadGuarda onLogout={handleLogout}>
         <BrowserRouter>
           <Routes>

@@ -6,6 +6,7 @@ import type { User } from '../lib/auth'
 type AuthContextType = {
   user: User | null
   rol: string
+  logout: () => void
   puedeGestionarUsuarios: boolean
   puedeGestionarPracticas: boolean
   puedeDesactivarPaciente: boolean
@@ -16,6 +17,7 @@ type AuthContextType = {
 export const AuthContext = createContext<AuthContextType>({
   user: null,
   rol: '',
+  logout: () => {},
   puedeGestionarUsuarios: false,
   puedeGestionarPracticas: false,
   puedeDesactivarPaciente: false,
@@ -23,12 +25,13 @@ export const AuthContext = createContext<AuthContextType>({
   puedeAgendar: false,
 })
 
-export function AuthProvider({ user, children }: { user: User | null; children: ReactNode }) {
+export function AuthProvider({ user, logout, children }: { user: User | null; logout: () => void; children: ReactNode }) {
   const rol = user?.rol || ''
 
   const value: AuthContextType = {
     user,
     rol,
+    logout,
     puedeGestionarUsuarios: ['admin', 'super_admin'].includes(rol),
     puedeGestionarPracticas: ['super_admin', 'jefe_clinica','admin'].includes(rol),
     puedeDesactivarPaciente: ['admin','super_admin', 'jefe_clinica'].includes(rol),

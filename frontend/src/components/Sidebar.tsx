@@ -1,10 +1,11 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { useContext } from 'react'
+import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Calendar,
   UserCog, LogOut, ChevronLeft, ChevronRight,
   Stethoscope
 } from 'lucide-react'
-import { logout } from '../lib/auth'
+import { AuthContext } from '../context/AuthContext'
 
 const menu = [
   { path: '/',              icon: LayoutDashboard, label: 'Home' },
@@ -17,11 +18,10 @@ const menu = [
 type SidebarProps = { collapsed: boolean; onToggle: () => void }
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
-  const navigate = useNavigate()
+  const { logout } = useContext(AuthContext)
 
   function handleLogout() {
     logout()
-    navigate('/')
   }
 
   return (
