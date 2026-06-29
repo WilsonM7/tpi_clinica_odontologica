@@ -18,17 +18,6 @@ type Paciente = {
   activo: boolean
 }
 
-type Cobro = {
-  id: string
-  fecha: string
-  monto: number
-  medio_pago: string
-  descripcion: string
-  tratamiento?: {
-    practica?: { nombre: string }
-  }
-}
-
 type Tratamiento = {
   id: string
   estado: string
@@ -84,7 +73,6 @@ export default function FichaPaciente() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [paciente, setPaciente] = useState<Paciente | null>(null)
-  const [cobros, setCobros] = useState<Cobro[]>([])
   const [tratamientos, setTratamientos] = useState<Tratamiento[]>([])
   const [profesionales, setProfesionales] = useState<Profesional[]>([])
   const [loading, setLoading] = useState(true)
@@ -117,15 +105,13 @@ export default function FichaPaciente() {
   async function cargarDatos() {
     setLoading(true)
     try {
-      const [pacRaw, cob, tra] = await Promise.all([
+      const [pacRaw, tra] = await Promise.all([
         api.get<any>(`/pacientes/${id}`),
-        api.get<Cobro[]>(`/cobros?paciente_id=${id}`),
         api.get<Tratamiento[]>(`/tratamientos?paciente_id=${id}`),
       ])
       const pac = mapPacienteAPI(pacRaw)
       setPaciente(pac)
       setForm(pac)
-      setCobros(cob)
       setTratamientos(tra)
     } catch {
       setPaciente(null)
@@ -194,8 +180,6 @@ export default function FichaPaciente() {
     }
     setConfirmarEliminar(false)
   }
-
-  const totalCobrado = cobros.reduce((acc, c) => acc + (c.monto || 0), 0)
 
   function claseEstado(estado: string) {
     switch (estado) {
@@ -306,14 +290,6 @@ export default function FichaPaciente() {
           </div>
 
           <div className="lg:col-span-2 space-y-6">
-            {/* Total cobrado */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-              <h2 className="font-semibold text-gray-800 mb-1">Total cobrado</h2>
-              <p className="text-2xl font-bold text-gray-700">
-                {totalCobrado > 0 ? `$${totalCobrado.toLocaleString()}` : 'Sin cobros registrados'}
-              </p>
-            </div>
-
             {/* Tratamientos */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
               <h2 className="font-semibold text-gray-800 mb-4">Tratamientos</h2>
@@ -396,42 +372,6 @@ export default function FichaPaciente() {
               )}
             </div>
 
-            {/* Historial de cobros */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="p-5 border-b border-gray-100">
-                <h2 className="font-semibold text-gray-800">Historial de cobros</h2>
-              </div>
-              {cobros.length === 0 ? (
-                <p className="text-gray-400 text-sm p-5">Sin cobros registrados</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="text-left px-4 py-2 text-gray-600 font-medium">Fecha</th>
-                        <th className="text-left px-4 py-2 text-gray-600 font-medium">Descripción / Práctica</th>
-                        <th className="text-left px-4 py-2 text-gray-600 font-medium">Monto</th>
-                        <th className="text-left px-4 py-2 text-gray-600 font-medium">Medio</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {cobros.map(c => (
-                        <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50">
-                          <td className="px-4 py-2 text-gray-600 whitespace-nowrap">{formatFecha(c.fecha)}</td>
-                          <td className="px-4 py-2 text-gray-700">
-                            {c.tratamiento?.practica?.nombre || c.descripcion || 'Cobro'}
-                          </td>
-                          <td className="px-4 py-2 text-gray-800 whitespace-nowrap">
-                            ${(c.monto || 0).toLocaleString()}
-                          </td>
-                          <td className="px-4 py-2 text-gray-500 whitespace-nowrap">{c.medio_pago || '-'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
           </div>
         </div>
       </div>
